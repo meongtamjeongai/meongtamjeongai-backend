@@ -1,0 +1,21 @@
+# fastapi_backend/.gitignore
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+# 생성된 마이그레이션 스크립트는 보통 포함하지만, 개인적인 DB 상태에 따라 제외하기도 함. 여기서는 포함.
+# Alembic
+alembic/versions/*
+# .idea/ (PyCharm 등 IDE 설정)
+# .vscode/ (VSCode 설정, 단 .devcontainer는 포함)
+*.sqlite3
+*.db
+# 서비스 계정 키 파일
+serviceAccountKey.json
+*.pem
+output.txt
+
+# Environments
+.env
++.env.*
+!*.env.example

@@ -1,0 +1,52 @@
+// fastapi_backend/.devcontainer/devcontainer.json
+{
+  "name": "멍탐정 FastAPI Backend", // Dev Container 이름 변경
+  // docker-compose.yml 파일의 위치를 프로젝트 루트 기준으로 수정
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "app", // docker-compose.yml에 정의된 FastAPI 앱 서비스 이름
+  "workspaceFolder": "/workspace", // 컨테이너 내 작업 폴더
+  // Dev Container 기능 추가 (예: Git)
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python", // Python 필수 확장
+        "ms-python.vscode-pylance", // Pylance (타입 체킹, 자동 완성 등)
+        "charliermarsh.ruff", // Ruff (Linter 및 Formatter)
+        "GitHub.copilot", // GitHub Copilot (선택 사항)
+        "GitHub.copilot-chat"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python", // 컨테이너 내 Python 경로
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false, // Pylint 대신 Ruff 사용
+        "python.formatting.provider": "none", // Formatter는 Ruff가 담당
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff", // 기본 포맷터를 Ruff로 설정
+          "editor.formatOnSave": true, // 저장 시 자동 포맷팅
+          "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit", // Ruff의 모든 자동 수정 적용 (명시적) - true로 변경 가능
+            "source.organizeImports": "explicit" // Ruff의 import 정리 (명시적) - true로 변경 가능
+          }
+        },
+        "terminal.integrated.defaultProfile.linux": "bash", // 기본 터미널 쉘
+        "terminal.integrated.shell.linux": "/bin/bash"
+        // Ruff 설정 (선택적, 프로젝트 루트에 pyproject.toml 또는 ruff.toml로 관리 권장)
+        // "ruff.lint.args": ["--select=E,F,W,I,N", "--ignore=E501"], // 예시: 특정 규칙 선택 및 무시
+        // Alembic 사용 시 Python 경로 문제 해결을 위한 설정 (필요시)
+        // "python.analysis.extraPaths": ["/workspace"]
+      }
+    }
+  },
+  // 포트 포워딩 설정 (docker-compose.yml에서도 설정하지만, devcontainer에서 명시하면 UI에 표시됨)
+  "forwardPorts": [8000, 5432],
+  // 컨테이너 생성 후 실행할 명령어 (예: pip install)
+  // Dockerfile에서 이미 처리하므로, 여기서는 주석 처리하거나 필요한 다른 초기화 명령어 추가 가능
+  // "postCreateCommand": "sudo chown vscode:vscode /workspace && pip install --user -r requirements.txt",
+  // "postCreateCommand": "pip install -r requirements.txt", // USER가 vscode이므로 sudo 불필요
+  // 컨테이너 실행 시 사용할 사용자 (Dockerfile의 USER와 일치)
+  "postCreateCommand": "pip install --user -r requirements.txt",
+  "remoteUser": "vscode"
+}

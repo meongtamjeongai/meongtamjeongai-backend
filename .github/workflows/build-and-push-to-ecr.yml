@@ -1,0 +1,274 @@
+name: Manual Build, Push to ECR, and Trigger Terraform Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: "빌드할 Git 참조 (브랜치, 태그 또는 커밋 SHA)"
+        required: true
+        default: "main"
+      image_tag_suffix:
+        description: "이미지 태그에 추가할 접미사 (선택 사항)"
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+
+jobs:
+  build_and_push_to_ecr:
+    name: 1. Build and Push Docker Image to ECR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code from specified ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_ref }}
+
+      - name: Generate image tag
+        id: generate_tag
+        run: |
+          timestamp_sha=$(date +%Y%m%d%H%M%S)-$(echo $GITHUB_SHA | cut -c1-7)
+          suffix="${{ github.event.inputs.image_tag_suffix }}"
+          if [ -n "$suffix" ]; then
+            echo "tag=${timestamp_sha}-${suffix}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${timestamp_sha}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Extract ECR Repository Name from URL
+        id: extract_repo_name
+        run: echo "repo_name=$(echo $ECR_REPOSITORY_URL | cut -d'/' -f2)" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: push_image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY_NAME: ${{ steps.extract_repo_name.outputs.repo_name }}
+          IMAGE_TAG: ${{ steps.generate_tag.outputs.tag }}
+        run: |
+          set -e 
+
+          echo "--- Debugging push_image step ---"
+          echo "ECR_REGISTRY: ${ECR_REGISTRY}"
+          echo "ECR_REPOSITORY_NAME: ${ECR_REPOSITORY_NAME}"
+          echo "IMAGE_TAG: ${IMAGE_TAG}"
+
+          if [ -z "$ECR_REGISTRY" ] || [ -z "$ECR_REPOSITORY_NAME" ] || [ -z "$IMAGE_TAG" ]; then
+            echo "::error::One or more critical environment variables for image URI are empty."
+            exit 1
+          fi
+
+          IMAGE_URI_WITH_TAG="$ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG"
+          LATEST_TAG_URI="$ECR_REGISTRY/$ECR_REPOSITORY_NAME:latest"
+
+          echo "Calculated IMAGE_URI_WITH_TAG: $IMAGE_URI_WITH_TAG"
+
+          echo "Building image: $IMAGE_URI_WITH_TAG from ref: ${{ github.event.inputs.git_ref }}"
+          docker build -t "$IMAGE_URI_WITH_TAG" .
+          if [ $? -ne 0 ]; then echo "::error::Docker build failed"; exit 1; fi
+
+          docker tag "$IMAGE_URI_WITH_TAG" "$LATEST_TAG_URI"
+          if [ $? -ne 0 ]; then echo "::error::Docker tag for latest failed"; exit 1; fi
+
+          echo "Pushing versioned image to ECR: $IMAGE_URI_WITH_TAG"
+          docker push "$IMAGE_URI_WITH_TAG"
+          if [ $? -ne 0 ]; then echo "::error::Docker push for versioned tag ($IMAGE_URI_WITH_TAG) failed"; exit 1; fi
+
+          echo "Pushing latest image to ECR: $LATEST_TAG_URI"
+          docker push "$LATEST_TAG_URI"
+          if [ $? -ne 0 ]; then echo "::error::Docker push for latest tag ($LATEST_TAG_URI) failed"; exit 1; fi
+
+          echo "Successfully pushed: $IMAGE_URI_WITH_TAG and $LATEST_TAG_URI"
+
+          echo "Writing image URI to file: image_uri.txt"
+          # printf 를 사용하여 image_uri.txt 파일에 줄바꿈 문자 없이 저장
+          printf "%s" "$IMAGE_URI_WITH_TAG" > image_uri.txt
+          echo "--- End of push_image step ---"
+
+      - name: Upload image URI as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-uri-artifact
+          path: image_uri.txt
+
+  deploy_via_terraform_cloud:
+    name: 2. Trigger Terraform Cloud Deployment
+    runs-on: ubuntu-latest
+    needs: build_and_push_to_ecr # 이전 'build_and_push_to_ecr' 작업에 의존
+
+    steps:
+      - name: Download image URI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: image-uri-artifact
+
+      - name: Read image URI from artifact and set as ENV var for this job
+        id: set_image_uri_env # 스텝 ID
+        run: |
+          set -e
+          if [ ! -f image_uri.txt ]; then
+            echo "::error::Artifact file image_uri.txt not found!"
+            exit 1
+          fi
+
+          # xargs를 사용하여 앞뒤 공백 및 줄바꿈 문자 제거
+          TRIMMED_URI=$(cat image_uri.txt | xargs)
+
+          if [ -z "$TRIMMED_URI" ]; then
+            echo "::error::Image URI from artifact is empty after trimming."
+            exit 1
+          fi
+          # 이 job의 후속 스텝에서 사용할 수 있도록 GITHUB_ENV에 설정
+          echo "NEW_IMAGE_URI_FOR_PAYLOAD=$TRIMMED_URI" >> $GITHUB_ENV
+          echo "Image URI for payload set to: [$TRIMMED_URI]"
+
+      - name: Trigger Terraform Cloud Run
+        env:
+          # 이전 스텝에서 GITHUB_ENV를 통해 설정된 값. 스크립트 내에서 $NEW_IMAGE_URI_FOR_PAYLOAD로 참조.
+          TFC_API_TOKEN: ${{ secrets.TFC_API_TOKEN }}
+          TFC_WORKSPACE_ID: ${{ secrets.TFC_WORKSPACE_ID }}
+          TFC_ORGANIZATION_NAME: ${{ secrets.TFC_ORGANIZATION_NAME }} # 로그 URL 생성에 사용
+        run: |
+          set -e 
+
+          echo "::group::Validating Inputs and Preparing Variables"
+          # NEW_IMAGE_URI_FOR_PAYLOAD 는 이 스크립트의 환경 변수로 이미 설정됨
+          if [ -z "$NEW_IMAGE_URI_FOR_PAYLOAD" ]; then 
+            echo "::error::NEW_IMAGE_URI_FOR_PAYLOAD is empty. This should have been set by the previous step."
+            exit 1
+          fi
+          if [ -z "$TFC_API_TOKEN" ]; then echo "::error::TFC_API_TOKEN secret is not set."; exit 1; fi
+          if [ -z "$TFC_WORKSPACE_ID" ]; then echo "::error::TFC_WORKSPACE_ID secret is not set."; exit 1; fi
+          if [ -z "$TFC_ORGANIZATION_NAME" ]; then echo "::warning::TFC_ORGANIZATION_NAME secret is not set."; fi
+
+          echo "Image URI to be used in PAYLOAD: [$NEW_IMAGE_URI_FOR_PAYLOAD]"
+          echo "Target TFC Workspace ID: [$TFC_WORKSPACE_ID]"
+          echo "Input validation passed."
+          echo "::endgroup::"
+
+          echo "::group::Constructing PAYLOAD with jq"
+          if ! command -v jq &> /dev/null; then
+            echo "::warning::jq command not found. Attempting to install jq..."
+            sudo apt-get update && sudo apt-get install -y jq
+            if ! command -v jq &> /dev/null; then
+              echo "::error::Failed to install jq. This step requires jq."
+              exit 1
+            fi
+            echo "jq installed successfully."
+          fi
+
+          # jq를 사용하여 PAYLOAD 생성
+          # custom_fastapi_docker_image 변수의 값은 HCL 문자열로 전달 ("value" | tojson)하고, hcl: true 로 설정
+          PAYLOAD=$(jq -n \
+            --arg msg "Automated deployment from GitHub Actions: New image ${NEW_IMAGE_URI_FOR_PAYLOAD}" \
+            --arg image_uri_for_tf_var "${NEW_IMAGE_URI_FOR_PAYLOAD}" \
+            --arg workspace_id_value "${TFC_WORKSPACE_ID}" \
+            '{
+              "data": {
+                "attributes": {
+                  "message": $msg,
+                  "is-destroy": false,
+                  "variables": [
+                    {
+                      "key": "custom_fastapi_docker_image",
+                      "value": ($image_uri_for_tf_var | tojson),
+                      "category": "terraform",
+                      "hcl": true,
+                      "sensitive": false
+                    }
+                  ]
+                },
+                "type": "runs",
+                "relationships": {
+                  "workspace": {
+                    "data": {
+                      "type": "workspaces",
+                      "id": $workspace_id_value
+                    }
+                  }
+                }
+              }
+            }')
+
+          if [ $? -ne 0 ] || [ -z "$PAYLOAD" ]; then
+            echo "::error::Failed to construct PAYLOAD using jq, or the PAYLOAD is empty."
+            exit 1
+          fi
+          echo "PAYLOAD constructed successfully using jq."
+          echo "--- Generated PAYLOAD (before sending to API) ---"
+          echo "$PAYLOAD" | jq . # jq로 예쁘게 출력
+          echo "--- End of PAYLOAD ---"
+          echo "::endgroup::"
+
+          echo "::group::Sending API Request to Terraform Cloud"
+          API_RESPONSE_FILE=$(mktemp)
+          CURL_STDERR_FILE=$(mktemp)
+
+          HTTP_CODE=$(curl -sS --request POST \
+            --header "Authorization: Bearer $TFC_API_TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            --data "$PAYLOAD" \
+            --output "$API_RESPONSE_FILE" \
+            --stderr "$CURL_STDERR_FILE" \
+            --write-out "%{http_code}" \
+            https://app.terraform.io/api/v2/runs)
+          CURL_EXIT_CODE=$?
+
+          API_BODY=$(cat "$API_RESPONSE_FILE")
+          CURL_ERRORS=$(cat "$CURL_STDERR_FILE")
+          rm "$API_RESPONSE_FILE" "$CURL_STDERR_FILE"
+
+          echo "Curl command exit code: $CURL_EXIT_CODE"
+          echo "HTTP response code from TFC API: $HTTP_CODE"
+          if [ -n "$CURL_ERRORS" ]; then
+            echo "::warning::Curl STDERR output (if any):"; echo "$CURL_ERRORS";
+          fi
+          echo "--- Terraform Cloud API Response Body (Raw) ---"
+          if echo "$API_BODY" | jq -e . > /dev/null 2>&1; then # 응답이 JSON이면 예쁘게 출력
+            echo "$API_BODY" | jq .
+          else
+            echo "$API_BODY" # JSON이 아니면 그대로 출력
+          fi
+          echo "--- End of API Response Body ---"
+          echo "::endgroup::"
+
+          echo "::group::Interpreting API Response and Concluding"
+          if [ "$CURL_EXIT_CODE" -ne 0 ]; then
+            echo "::error::Curl command itself failed with exit code $CURL_EXIT_CODE."
+            exit 1
+          fi
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "Successfully triggered a new run in Terraform Cloud."
+            RUN_ID=$(echo "$API_BODY" | jq -r .data.id 2>/dev/null || echo "N/A")
+            echo "Terraform Cloud Run ID: $RUN_ID"
+            if [ "$RUN_ID" != "N/A" ] && [ -n "$TFC_ORGANIZATION_NAME" ] && [ -n "$TFC_WORKSPACE_ID" ]; then
+                echo "View the run in Terraform Cloud: https://app.terraform.io/app/${TFC_ORGANIZATION_NAME}/workspaces/${TFC_WORKSPACE_ID}/runs/${RUN_ID}"
+            fi
+          else
+            echo "::error::Failed to trigger a new run in Terraform Cloud. HTTP Status Code: $HTTP_CODE"
+            if echo "$API_BODY" | jq -e .errors > /dev/null 2>&1 ; then
+              echo "Terraform Cloud Error Details (parsed from API response):"
+              echo "$API_BODY" | jq .errors
+            fi
+            exit 1
+          fi
+          echo "::endgroup::"

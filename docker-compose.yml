@@ -1,0 +1,46 @@
+# meongtamdjeong_tutorial/docker-compose.yml
+# (수정된 최종 버전)
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/workspace:cached
+    env_file:
+      - .env.dev
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /workspace/app
+    networks:
+      - meong
+
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_DB: dev_db
+    ports:
+      - "23450:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev_user -d dev_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - meong
+
+volumes:
+  postgres_data:
+
+networks:
+  meong:
+    external: true
