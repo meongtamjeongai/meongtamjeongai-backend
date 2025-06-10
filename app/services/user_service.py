@@ -1,16 +1,16 @@
 # fastapi_backend/app/services/user_service.py
 # 사용자 관련 비즈니스 로직을 처리하는 서비스
 
-from typing import List, Optional
+from typing import List
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-import firebase_admin
 from firebase_admin import auth as firebase_auth
 
 from app.crud import crud_user
 from app.models.user import User as UserModel
-from app.schemas.user import UserUpdate
 
+from app.schemas.user import UserUpdate
+from app.schemas.user import UserCreate
 
 class UserService:
     def __init__(self, db: Session):
@@ -131,3 +131,35 @@ class UserService:
         print(f"SERVICE (delete_user): ✅ User {user_id} and related data have been deleted from DB.")
         
         return {"message": f"User with ID {user_id} has been successfully deleted."}
+    
+    def create_initial_superuser(self, *, user_in: UserCreate) -> UserModel:
+        """
+        시스템에 슈퍼유저가 한 명도 없을 경우에만 최초의 슈퍼유저를 생성합니다.
+        """
+        # DB에 슈퍼유저가 이미 존재하는지 확인
+        any_superuser = self.db.query(UserModel).filter(UserModel.is_superuser == True).first()
+        if any_superuser:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="A superuser already exists in the system. Cannot create another initial superuser.",
+            )
+        
+        # crud_user.create_user가 is_superuser, is_active를 처리할 수 있도록 UserCreate 스키마를 사용합니다.
+        # UserCreate 스키마에 is_superuser 필드가 없다면 추가하거나, crud 함수를 직접 수정해야 합니다.
+        # 여기서는 UserCreate가 해당 필드를 받는다고 가정합니다.
+        
+        # UserCreate 객체에 슈퍼유저 플래그 설정
+        user_in.is_superuser = True
+        user_in.is_active = True
+        
+        # CRUD 함수를 사용하여 사용자 생성
+        # (create_user 함수는 내부적으로 비밀번호 해싱 등을 처리)
+        new_superuser = crud_user.create_user(self.db, user_in=user_in)
+        
+        return new_superuser    
+    
+    def does_superuser_exist(self) -> bool:
+        """
+        시스템에 슈퍼유저가 한 명이라도 존재하는지 확인하여 bool 값을 반환합니다.
+        """
+        return self.db.query(UserModel).filter(UserModel.is_superuser == True).first() is not None
