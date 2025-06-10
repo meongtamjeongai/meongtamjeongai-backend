@@ -19,6 +19,15 @@ fi
 
 # Alembic DB 마이그레이션 실행 (운영 환경에서만)
 if [ "$APP_ENV" = "prod" ]; then
+    VERSIONS_DIR="/workspace/alembic/versions"
+    echo "🔍 Checking for Alembic versions directory at $VERSIONS_DIR..."
+    if [ ! -d "$VERSIONS_DIR" ]; then
+        echo "⚠️ Versions directory not found. Creating it..."
+        mkdir -p "$VERSIONS_DIR"
+        echo "✅ Directory $VERSIONS_DIR created."
+    else
+        echo "✅ Versions directory already exists."
+    fi
     echo "🏃 Running Alembic migrations for production..."
     alembic upgrade head
     echo "✅ Alembic migrations completed."
