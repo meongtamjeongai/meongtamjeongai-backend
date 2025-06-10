@@ -67,3 +67,67 @@ class UserService:
                 # 프로덕션에서는 이를 처리하는 추가 정책(예: 재시도 큐)이 필요할 수 있음.
 
         return {"message": "User account deactivated successfully."}
+
+    def get_all_users(self, skip: int = 0, limit: int = 100) -> List[UserModel]:
+        """
+        시스템의 모든 사용자 목록을 가져옵니다.
+        (서비스 계층에서는 권한 검사를 하지 않고, API 계층의 의존성 주입에서 처리)
+        """
+        return crud_user.get_users(self.db, skip=skip, limit=limit)
+    
+    def update_user_by_admin(self, *, user_id: int, user_in: UserUpdate) -> UserModel:
+        """
+        관리자가 사용자의 정보를 업데이트합니다.
+        """
+        user_to_update = crud_user.get_user(self.db, user_id=user_id)
+        if not user_to_update:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with ID {user_id} not found",
+            )
+        
+        # UserUpdate 스키마에 정의된 필드만 사용하여 업데이트
+        updated_user = crud_user.update_user(self.db, db_user=user_to_update, user_in=user_in)
+        return updated_user
+
+    def delete_user_by_admin(self, *, user_id: int) -> dict:
+        """
+        관리자가 사용자를 DB와 Firebase에서 모두 삭제합니다.
+        (기존 deactivate_current_user 로직을 재활용 및 강화)
+        """
+        user_to_delete = crud_user.get_user(self.db, user_id=user_id)
+        if not user_to_delete:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with ID {user_id} not found",
+            )
+        
+        # 1. 연결된 Firebase 계정 삭제
+        firebase_uids_to_delete = [
+            sa.provider_user_id for sa in user_to_delete.social_accounts
+            if sa.provider.value.startswith('firebase_')
+        ]
+
+        for uid in firebase_uids_to_delete:
+            try:
+                firebase_auth.delete_user(uid)
+                print(f"SERVICE (delete_user): ✅ Firebase user with UID {uid} has been deleted.")
+            except firebase_auth.UserNotFoundError:
+                print(f"SERVICE (delete_user): ⚠️ Firebase user with UID {uid} not found, proceeding.")
+            except Exception as e:
+                print(f"SERVICE (delete_user): ❌ Failed to delete Firebase user {uid}: {e}")
+                # Firebase 삭제 실패 시에도 DB 삭제는 진행할지, 아니면 전체 롤백할지 정책 결정 필요
+                # 여기서는 에러를 발생시켜 중단
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to delete Firebase user {uid}: {e}"
+                )
+
+        # 2. 우리 DB에서 사용자 완전 삭제 (Hard Delete)
+        # cascade 설정에 의해 social_accounts, conversations, user_point 등도 함께 삭제됨
+        self.db.delete(user_to_delete)
+        self.db.commit()
+        
+        print(f"SERVICE (delete_user): ✅ User {user_id} and related data have been deleted from DB.")
+        
+        return {"message": f"User with ID {user_id} has been successfully deleted."}

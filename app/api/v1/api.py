@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     conversations,
     personas,
     users,
+    admin,
 )
 
 api_router_v1 = APIRouter()
@@ -23,3 +24,9 @@ api_router_v1.include_router(
 )
 
 api_router_v1.include_router(users.router, prefix="/users", tags=["사용자 (Users)"])
+
+api_router_v1.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["관리자 (Admin)"]
+)

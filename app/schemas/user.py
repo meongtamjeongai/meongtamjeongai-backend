@@ -35,6 +35,8 @@ class UserInDBBase(UserBase):
         "from_attributes": True,
     }
 
+class UserDetailResponse(UserInDBBase):
+    pass
 
 # 사용자 생성 시 요청 본문에 필요한 속성
 class UserCreate(UserBase):
