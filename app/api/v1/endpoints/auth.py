@@ -2,11 +2,14 @@
 # 인증 관련 API 엔드포인트 정의
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
+
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from app.core.security import create_access_token, create_refresh_token
+from app.crud import crud_user
 from app.db.session import get_db
 from app.schemas.token import SocialLoginRequest, Token
-from app.services.auth_service import AuthService
 
 router = APIRouter()
 
@@ -40,7 +43,8 @@ async def login_with_firebase_id_token(
 
     user, service_token = result
 
-    print(f"API: User {user.id} authenticated via Firebase. Returning service tokens.")
+    print(
+        f"API: User {user.id} authenticated via Firebase. Returning service tokens.")
     return service_token
 
 
@@ -76,3 +80,43 @@ async def refresh_access_token(
 
     # 새로운 Access Token만 반환. Refresh Token은 기존 것 유지.
     return Token(access_token=new_access_token)
+
+
+@router.post(
+    "/token",
+    response_model=Token,
+    summary="이메일/비밀번호 기반 로그인 (관리자용)",
+    description="이메일과 비밀번호로 로그인하여 서비스 JWT를 발급받습니다."
+)
+async def login_for_access_token(
+    db: Session = Depends(get_db),
+    form_data: OAuth2PasswordRequestForm = Depends()
+):
+    """
+    OAuth2 호환 폼 데이터(username, password)로 사용자를 인증합니다.
+    관리자 앱에서는 username 필드에 이메일을 담아 보냅니다.
+    """
+    user = crud_user.authenticate_user(
+        db, email=form_data.username, password=form_data.password
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # ⭐️ 관리자 로그인 시에는 슈퍼유저인지 확인하는 로직 추가
+    if not user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The user does not have superuser privileges",
+        )
+
+    access_token = create_access_token(subject=user.id)
+    refresh_token = create_refresh_token(subject=user.id)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
