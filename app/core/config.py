@@ -27,8 +27,12 @@ class Settings(BaseSettings):
     # JWT
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
-    REFRESH_TOKEN_EXPIRE_DAYS: int
+    
+    # 필수 JWT 설정에 합리적인 기본값 추가
+    # 이 값들은 실제 운영 시 Terraform을 통해 주입된 값으로 덮어쓰여집니다.
+    # 이 기본값은 Alembic 실행 등, 모든 환경 변수가 필요 없는 컨텍스트에서 오류를 방지합니다.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Firebase
     FIREBASE_SERVICE_ACCOUNT_KEY_PATH: str

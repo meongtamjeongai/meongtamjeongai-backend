@@ -18,9 +18,12 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(PROJECT_DIR))
 
 # 이제 app.models.base (또는 모든 모델이 정의된 곳)와 app.core.config를 임포트할 수 있어야 합니다.
-from app.core.config import settings  # FastAPI 앱의 설정 임포트 (DATABASE_URL 등)
+# FastAPI 앱의 설정 임포트 (DATABASE_URL 등)
+from app.core.config import settings
+
+# 모든 SQLAlchemy 모델의 Base 클래스 (아직 생성 전, 곧 생성 예정)
 from app.models.base import (
-    Base,  # 모든 SQLAlchemy 모델의 Base 클래스 (아직 생성 전, 곧 생성 예정)
+    Base,
 )
 
 # ------------------------------------------------------------

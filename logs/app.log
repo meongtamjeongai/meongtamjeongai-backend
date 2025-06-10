@@ -1,0 +1,9 @@
+2025-06-10 02:16:14,213 - root - INFO - logging_config:setup_logging:39 - ✅ Logging configured successfully. Logs will be sent to console and logs/app.log
+2025-06-10 02:16:14,214 - app.main - INFO - main:lifespan:39 - --- Application starting in [dev] mode ---
+2025-06-10 02:16:14,215 - app.main - INFO - main:lifespan:42 - --- Application Settings ---
+2025-06-10 02:16:14,215 - app.main - INFO - main:lifespan:43 - Project Name: 멍탐정 API
+2025-06-10 02:16:14,216 - app.main - INFO - main:lifespan:44 - Access Token Expire Minutes: 5
+2025-06-10 02:16:14,217 - app.main - INFO - main:lifespan:46 - Refresh Token Expire Days: 1
+2025-06-10 02:16:14,218 - app.main - INFO - main:lifespan:48 - --------------------------
+2025-06-10 02:16:14,418 - app.main - INFO - main:lifespan:57 - ✅ Firebase Admin SDK initialized successfully.
+2025-06-10 02:16:14,574 - app.main - INFO - main:lifespan:74 - ✅ Database connection test successful on startup.
