@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_active_superuser
 from app.db.session import get_db
 from app.models.user import User as UserModel
-from app.schemas.user import UserDetailResponse # 관리자용 응답 스키마
+from app.schemas.user import UserDetailResponse,UserUpdate # 관리자용 응답 스키마
 from app.services.user_service import UserService
 
 router = APIRouter()
