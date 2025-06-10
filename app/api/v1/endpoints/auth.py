@@ -10,6 +10,7 @@ from app.core.security import create_access_token, create_refresh_token
 from app.crud import crud_user
 from app.db.session import get_db
 from app.schemas.token import SocialLoginRequest, Token
+from app.services.auth_service import AuthService
 
 router = APIRouter()
 
