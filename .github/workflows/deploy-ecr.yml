@@ -147,7 +147,8 @@ jobs:
           COMMAND_SCRIPT="${COMMAND_SCRIPT//__CONTAINER_NAME__/${CONTAINER_NAME}}"
           COMMAND_SCRIPT="${COMMAND_SCRIPT//__HOST_PORT__/${HOST_PORT}}"
           COMMAND_SCRIPT="${COMMAND_SCRIPT//__CONTAINER_PORT__/${CONTAINER_PORT}}"
-
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__FIREBASE_B64_JSON__/${FIREBASE_B64_JSON}}"
+          
           # SSM 파라미터 생성 및 전송
           SSM_PARAMETERS=$(jq -n --arg script "$COMMAND_SCRIPT" '{ "commands": ($script | split("\n")) }')
 
