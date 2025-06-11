@@ -15,8 +15,9 @@ from app.api.v1.api import api_router_v1
 from app.core.config import settings
 from app.core.exceptions import add_exception_handlers
 from app.core.logging_config import setup_logging
+from app.crud import crud_phishing
+from app.db.session import SessionLocal, get_db
 from app.db.session import engine as db_engine
-from app.db.session import get_db
 from app.middleware.logging_middleware import LoggingMiddleware
 
 
@@ -65,16 +66,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             f"⚠️ Firebase service account key not found at '{firebase_key_path}'. "
             "Skipping Firebase Admin SDK initialization. This is expected in some test environments."
         )
-
-    # 데이터베이스 연결 테스트
+    # 데이터베이스 연결 테스트 및 초기 데이터 삽입
     if db_engine:
         try:
-            with db_engine.connect() as connection:
-                connection.execute(text("SELECT 1"))
+            with SessionLocal() as db:
+                # DB 연결 테스트
+                db.execute(text("SELECT 1"))
                 logger.info("✅ Database connection test successful on startup.")
+
+                # 👇 [신규] 피싱 카테고리 초기 데이터 삽입
+                crud_phishing.populate_categories(db)
+
         except Exception as e:
             logger.error(
-                f"❌ Database connection check failed on startup: {e}", exc_info=True
+                f"❌ Database connection or initial data population failed on startup: {e}",
+                exc_info=True,
             )
     else:
         logger.warning(

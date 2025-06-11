@@ -5,6 +5,8 @@ from .base import Base  # Base 클래스 임포트
 from .conversation import Conversation
 from .message import Message, SenderType
 from .persona import Persona
+from .phishing_case import PhishingCase
+from .phishing_category import PhishingCategory, PhishingCategoryEnum
 from .social_account import SocialAccount, SocialProvider
 from .user import User
 from .user_point import UserPoint
@@ -20,5 +22,7 @@ __all__ = [
     "Message",
     "SenderType",  # Enum도 포함
     "UserPoint",
+    "PhishingCategory",
+    "PhishingCategoryEnum",
+    "PhishingCase",
 ]
-

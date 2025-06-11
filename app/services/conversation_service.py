@@ -6,15 +6,70 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.crud import crud_conversation, crud_persona
+from app.crud import crud_conversation, crud_persona, crud_user
 from app.models.conversation import Conversation
 from app.models.user import User
-from app.schemas.conversation import ConversationCreate
+from app.schemas.conversation import ConversationCreate, ConversationCreateAdmin
 
 
 class ConversationService:
     def __init__(self, db: Session):
         self.db = db
+
+    # 👇 관리자용 대화방 생성 서비스 함수
+    def start_new_conversation_admin(
+        self, conversation_in: ConversationCreateAdmin
+    ) -> Conversation:
+        """[Admin] 관리자가 특정 사용자와 페르소나를 지정하여 새 대화방을 시작합니다."""
+        # 1. 대상 사용자가 존재하는지 확인
+        user = crud_user.get_user(self.db, user_id=conversation_in.user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with id {conversation_in.user_id} not found.",
+            )
+
+        # 2. 대상 페르소나가 존재하는지 확인
+        persona = crud_persona.get_persona(
+            self.db, persona_id=conversation_in.persona_id
+        )
+        if not persona:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Persona with id {conversation_in.persona_id} not found.",
+            )
+
+        # 3. ConversationCreate 스키마 형태로 변환하여 기존 생성 함수 호출
+        #    (이렇게 하면 코드 재사용성이 높아집니다)
+        create_data = ConversationCreate(
+            persona_id=conversation_in.persona_id, title=conversation_in.title
+        )
+
+        new_conversation = crud_conversation.create_conversation(
+            self.db, conversation_in=create_data, user_id=conversation_in.user_id
+        )
+
+        return new_conversation
+
+    # 👇 관리자용 전체 대화방 조회 서비스 추가
+    def get_all_conversations_admin(
+        self, skip: int = 0, limit: int = 100
+    ) -> List[Conversation]:
+        """[Admin] 시스템의 모든 대화방 목록을 조회합니다."""
+        return crud_conversation.get_all_conversations(self.db, skip=skip, limit=limit)
+
+    # 👇 관리자용 대화방 삭제 서비스 추가
+    def delete_conversation_admin(self, conversation_id: int) -> Optional[Conversation]:
+        """[Admin] 특정 대화방을 ID로 삭제합니다."""
+        conversation_to_delete = crud_conversation.delete_conversation_by_id(
+            self.db, conversation_id=conversation_id
+        )
+        if not conversation_to_delete:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+        return conversation_to_delete
 
     def get_conversation_by_id_for_user(
         self, conversation_id: int, current_user: User
@@ -92,8 +147,3 @@ class ConversationService:
         return crud_conversation.delete_conversation(
             self.db, conversation_id=conversation_to_delete.id, user_id=current_user.id
         )
-
-
-# `app/services/__init__.py` 파일에 다음을 추가합니다:
-# from .conversation_service import ConversationService
-# __all__.append("ConversationService")

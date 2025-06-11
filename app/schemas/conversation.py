@@ -8,8 +8,7 @@ from pydantic import Field
 
 from app.schemas.base_schema import BaseModel
 from app.schemas.persona import PersonaResponse  # 대화방 목록에 페르소나 정보 포함
-
-# from app.schemas.message import MessageResponse # 마지막 메시지 정보 포함 시 필요
+from app.schemas.user import UserResponse
 
 
 # 대화방 목록에 마지막 메시지 요약을 포함하기 위한 스키마 (선택적)
@@ -51,3 +50,21 @@ class ConversationResponse(ConversationBase):
     # Pydantic V1
     # class Config:
     #     orm_mode = True
+
+
+# 👇 관리자용 응답 스키마
+class ConversationAdminResponse(ConversationResponse):
+    """관리자용 대화방 응답 스키마. 사용자 정보를 포함합니다."""
+
+    user: UserResponse
+
+
+# 👇 관리자용 대화방 생성 요청 스키마
+class ConversationCreateAdmin(BaseModel):
+    """관리자가 대화방을 생성할 때 사용하는 스키마."""
+
+    user_id: int = Field(..., description="대화방을 생성할 대상 사용자의 ID")
+    persona_id: int = Field(..., description="대화할 페르소나의 ID")
+    title: Optional[str] = Field(
+        None, max_length=255, description="대화방 제목 (선택 사항)"
+    )

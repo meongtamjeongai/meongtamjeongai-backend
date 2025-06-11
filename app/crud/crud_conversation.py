@@ -109,5 +109,39 @@ def delete_conversation(
     return None
 
 
-# `app/crud/__init__.py` 파일에 다음을 추가합니다:
-# from . import crud_conversation
+# 👇 관리자용 전체 대화방 조회 함수 추가
+def get_all_conversations(
+    db: Session, *, skip: int = 0, limit: int = 100
+) -> List[Conversation]:
+    """
+    모든 대화방 목록을 최신 메시지 시간 순으로 정렬하여 조회합니다.
+    페르소나와 사용자 정보도 함께 로드합니다. (관리자용)
+    """
+    return (
+        db.query(Conversation)
+        .options(
+            joinedload(Conversation.persona),  # 페르소나 정보 Eager 로딩
+            joinedload(Conversation.user),  # 👈 사용자 정보 Eager 로딩 추가
+        )
+        .order_by(desc(Conversation.last_message_at))
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
+# 👇 관리자용 대화방 삭제 함수 추가
+def delete_conversation_by_id(
+    db: Session, *, conversation_id: int
+) -> Optional[Conversation]:
+    """
+    주어진 ID의 대화방을 삭제합니다. (관리자용, 사용자 권한 확인 없음)
+    """
+    db_conversation = (
+        db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    )
+    if db_conversation:
+        db.delete(db_conversation)
+        db.commit()
+        return db_conversation
+    return None

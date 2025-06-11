@@ -2,21 +2,53 @@
 # 메시지 관련 비즈니스 로직을 처리하는 서비스
 
 from typing import List
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.crud import crud_conversation, crud_message
 from app.models.message import Message, SenderType
 from app.models.user import User
-from app.schemas.message import MessageCreate, MessageResponse, ChatMessageResponse # ⭐️ ChatMessageResponse 임포트
+from app.schemas.gemini import GeminiChatResponse  # ⭐️ GeminiChatResponse 임포트
+from app.schemas.message import (  # ⭐️ ChatMessageResponse 임포트
+    ChatMessageResponse,
+    MessageCreate,
+    MessageResponse,
+)
 from app.services.gemini_service import GeminiService
-from app.schemas.gemini import GeminiChatResponse # ⭐️ GeminiChatResponse 임포트
 
 
 class MessageService:
     def __init__(self, db: Session):
         self.db = db
         self.gemini_service = GeminiService()
+
+    # 👇 관리자용 메시지 조회 서비스 추가
+    def get_messages_for_conversation_admin(
+        self,
+        conversation_id: int,
+        skip: int = 0,
+        limit: int = 100,
+        sort_asc: bool = False,
+    ) -> List[Message]:
+        """
+        [Admin] 특정 대화방의 메시지 목록을 가져옵니다 (사용자 권한 확인 없음).
+        """
+        conversation = crud_conversation.get_conversation(
+            self.db, conversation_id=conversation_id
+        )
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found.",
+            )
+        return crud_message.get_messages_by_conversation(
+            self.db,
+            conversation_id=conversation_id,
+            skip=skip,
+            limit=limit,
+            sort_asc=sort_asc,
+        )
 
     def get_messages_for_conversation(
         self,
@@ -49,7 +81,9 @@ class MessageService:
 
     async def send_new_message(
         self, conversation_id: int, message_in: MessageCreate, current_user: User
-    ) -> ChatMessageResponse: # ⭐️ 변경: 반환 타입을 List에서 ChatMessageResponse로 변경
+    ) -> (
+        ChatMessageResponse
+    ):  # ⭐️ 변경: 반환 타입을 List에서 ChatMessageResponse로 변경
         db_conversation = crud_conversation.get_conversation(
             self.db, conversation_id=conversation_id, user_id=current_user.id
         )
@@ -74,15 +108,19 @@ class MessageService:
         system_prompt = db_conversation.persona.system_prompt
 
         try:
-            gemini_response: GeminiChatResponse = await self.gemini_service.get_chat_response(
-                system_prompt=system_prompt,
-                history=history,
-                user_message=user_db_message.content
+            gemini_response: GeminiChatResponse = (
+                await self.gemini_service.get_chat_response(
+                    system_prompt=system_prompt,
+                    history=history,
+                    user_message=user_db_message.content,
+                )
             )
         except (ConnectionError, HTTPException) as e:
             # Gemini 서비스 자체의 오류를 그대로 클라이언트에 전달
             detail = e.detail if isinstance(e, HTTPException) else str(e)
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
+            )
 
         ai_message_in = MessageCreate(content=gemini_response.response)
         ai_db_message = crud_message.create_message(
