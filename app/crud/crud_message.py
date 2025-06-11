@@ -28,23 +28,23 @@ def get_messages_by_conversation(
     *,
     conversation_id: int,
     skip: int = 0,
-    limit: int = 100,
+    limit: int | None = 100,
     sort_asc: bool = False,
 ) -> List[Message]:
-    """
-    특정 대화방의 모든 메시지 목록을 조회합니다.
-    기본적으로 최신 메시지 순(내림차순)으로 정렬하며, sort_asc=True일 경우 오래된 순(오름차순)으로 정렬합니다.
-    (채팅 UI에서는 일반적으로 오래된 메시지부터 보여주고 새 메시지를 아래에 추가하므로,
-     API에서는 최신 메시지를 먼저 반환하여 클라이언트가 역순으로 표시하거나,
-     오래된 순으로 반환하여 순서대로 표시할 수 있도록 옵션 제공)
-    """
+    # ...
     query = db.query(Message).filter(Message.conversation_id == conversation_id)
     if sort_asc:
         query = query.order_by(asc(Message.created_at))
     else:
         query = query.order_by(desc(Message.created_at))
 
-    return query.offset(skip).limit(limit).all()
+    query = query.offset(skip)
+
+    # ⭐️ limit이 None이 아닐 때만 limit을 적용
+    if limit is not None:
+        query = query.limit(limit)
+        
+    return query.all()
 
 
 def create_message(
