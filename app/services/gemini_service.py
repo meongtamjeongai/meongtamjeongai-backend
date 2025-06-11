@@ -62,20 +62,20 @@ class GeminiService:
                     types.Content(role=role, parts=[types.Part.from_text(msg.content)])
                 )
             
-            # 2. 모델 및 설정 정의
-            # gemini-1.5-flash는 빠르고 비용 효율적
-            model = self.client.models.get('gemini-1.5-flash')
-            
-            # 3. 채팅 세션 시작 (기록 포함)
-            # system_prompt는 첫 번째 user 메시지 앞에 model의 생각으로 넣어줄 수 있음
-            # 또는 model.start_chat의 system_instruction 파라미터 활용 (SDK 버전 확인 필요)
-            chat = model.start_chat(history=reconstructed_history)
-
-            # 4. 새로운 프롬프트로 응답 요청
-            # send_message_async를 사용하면 비동기적으로 호출 가능
-            response = await chat.send_message_async(
-                [system_prompt, user_message] # 시스템 프롬프트와 사용자 메시지를 함께 전달
+            # 2.genai.GenerativeModel을 사용하여 모델 초기화
+            model_with_system_prompt = genai.GenerativeModel(
+                'gemini-1.5-flash-latest',
+                system_instruction=system_prompt
             )
+
+            # 3. 대화 세션 시작
+            chat_session = model_with_system_prompt.start_chat(
+                history=reconstructed_history
+            )
+            
+            # 4. 사용자 메시지 전송
+            # send_message_async에는 사용자 메시지만 단일 문자열로 전달합니다.
+            response = await chat_session.send_message_async(user_message)            
 
             # 5. 토큰 사용량 계산 (응답 객체에서 확인 필요, API 문서 참조)
             # 예시: response.usage_metadata.total_token_count
