@@ -126,7 +126,7 @@ jobs:
             -e DATABASE_URL="__DATABASE_URL__" \
             -e SECRET_KEY="__SECRET_KEY__" \
             -e FIREBASE_SERVICE_ACCOUNT_KEY_PATH="/tmp/firebase_service_account.json" \
-            -e FIREBASE_SERVICE_ACCOUNT_KEY_JSON_BASE64="__FIREBASE_B64_JSON__" \
+            -e FIREBASE_SERVICE_ACCOUNT_KEY_JSON_BASE64=__FIREBASE_B64_JSON__ \
             -e GEMINI_API_KEY="__GEMINI_API_KEY__" \
             --restart always \
             __FULL_IMAGE_URI__
