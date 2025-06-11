@@ -91,12 +91,6 @@ jobs:
         run: |
           set -e
 
-          # 변수 유효성 검사
-          if [ -z "$HOST_PORT" ] || [ -z "$CONTAINER_PORT" ] || [ -z "$ALB_PRIVATE_IP" ] || [ -z "$FASTAPI_BASE_URL" ]; then
-            echo "::error:: One or more required secrets are not set."
-            exit 1
-          fi
-
           # EC2에서 실행될 셸 스크립트 정의
           COMMAND_SCRIPT=$(cat <<'EOF'
           set -e
