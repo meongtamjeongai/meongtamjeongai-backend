@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_active_user  # 실제 인증 의존성 함수 임포트
 from app.db.session import get_db
 from app.models.user import User as UserModel
-from app.schemas.message import MessageCreate, MessageResponse
+from app.schemas.message import MessageCreate, MessageResponse, ChatMessageResponse 
 from app.services.message_service import MessageService
 
 # 이 라우터는 /conversations/{conversation_id}/messages 와 같은 경로로 등록될 것임
@@ -60,41 +60,31 @@ async def read_conversation_messages(
 
 
 @router.post(
-    "/",  # /conversations/{conversation_id}/messages/ 의 상대 경로
-    response_model=List[MessageResponse],
+    "/",
+    response_model=ChatMessageResponse, # ⭐️ 변경: List[MessageResponse] -> ChatMessageResponse
     status_code=status.HTTP_201_CREATED,
-    summary="새 메시지 전송 및 AI 응답 받기",
-    description="대화방에 새 메시지를 전송하고, AI의 응답을 함께 받습니다. 본인의 대화방만 접근 가능합니다.",
+    summary="새 메시지 전송 및 구조화된 AI 응답 받기", # ⭐️ 변경: 요약 설명 업데이트
+    description="대화방에 새 메시지를 전송하고, AI의 응답 및 추천 질문 등을 포함한 구조화된 객체를 받습니다.",
     tags=["메시지 (Messages)"],
 )
 async def send_new_message_in_conversation(
     conversation_id: int = Path(
         ..., title="대화방 ID", description="메시지를 전송할 대화방의 ID"
     ),
-    message_in: MessageCreate = Body(...),  # 요청 본문에서 content를 받음
+    message_in: MessageCreate = Body(...),
     message_service: MessageService = Depends(get_message_service),
-    current_user: UserModel = Depends(get_current_active_user),  # 실제 인증 적용
+    current_user: UserModel = Depends(get_current_active_user),
 ):
-    """
-    사용자가 대화방에 새 메시지를 보냅니다. 서버는 이 메시지를 저장하고,
-    연결된 페르소나의 AI로부터 응답을 받아 함께 반환합니다.
-    - **conversation_id**: 메시지를 보낼 대화방 ID.
-    - **Request body (message_in)**:
-        - **content**: 사용자가 입력한 메시지 내용.
-    """
-    if (
-        not message_in.content or not message_in.content.strip()
-    ):  # 메시지 내용이 비어있는 경우 방지
+    if not message_in.content or not message_in.content.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Message content cannot be empty.",
         )
-
-    # 서비스 계층에서 conversation_id와 current_user.id를 사용하여 권한 확인 및 메시지 처리
-    # send_new_message는 [user_msg_response, ai_msg_response]를 반환
-    message_responses = await message_service.send_new_message(
+    
+    # ⭐️ 변경 없음: 서비스 계층의 반환값이 바뀌었지만, FastAPI가 자동으로 직렬화하므로 호출 코드는 동일합니다.
+    chat_response = await message_service.send_new_message(
         conversation_id=conversation_id,
         message_in=message_in,
         current_user=current_user,
     )
-    return message_responses
+    return chat_response

@@ -2,16 +2,15 @@
 # 메시지 관련 비즈니스 로직을 처리하는 서비스
 
 from typing import List
-
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.crud import crud_conversation, crud_message  # UserPoint CRUD 추가
+from app.crud import crud_conversation, crud_message
 from app.models.message import Message, SenderType
 from app.models.user import User
-from app.schemas.message import MessageCreate, MessageResponse  # MessageResponse 추가
-
+from app.schemas.message import MessageCreate, MessageResponse, ChatMessageResponse # ⭐️ ChatMessageResponse 임포트
 from app.services.gemini_service import GeminiService
+from app.schemas.gemini import GeminiChatResponse # ⭐️ GeminiChatResponse 임포트
 
 
 class MessageService:
@@ -50,8 +49,7 @@ class MessageService:
 
     async def send_new_message(
         self, conversation_id: int, message_in: MessageCreate, current_user: User
-    ) -> List[MessageResponse]:
-        # 1. 대화방 존재 및 권한 확인 (기존과 동일)
+    ) -> ChatMessageResponse: # ⭐️ 변경: 반환 타입을 List에서 ChatMessageResponse로 변경
         db_conversation = crud_conversation.get_conversation(
             self.db, conversation_id=conversation_id, user_id=current_user.id
         )
@@ -61,58 +59,48 @@ class MessageService:
                 detail="Conversation not found or not accessible.",
             )
 
-        # 2. 사용자 메시지 저장 (기존과 동일)
         user_db_message = crud_message.create_message(
             self.db,
             message_in=message_in,
             conversation_id=conversation_id,
             sender_type=SenderType.USER,
         )
+        crud_conversation.update_conversation_last_message_at(self.db, conversation_id)
 
-        # 3. 대화방의 last_message_at 업데이트 (기존과 동일)
-        crud_conversation.update_conversation_last_message_at(
-            self.db, conversation_id=conversation_id
-        )
-
-        # ⭐️ 4. Gemini AI 응답 생성
-        # 이전 대화 기록을 DB에서 가져옴
+        # ⭐️ 변경: Gemini 호출 및 결과 처리 로직
         history = crud_message.get_messages_by_conversation(
-            self.db,
-            conversation_id=conversation_id,
-            limit=None, # 👈 limit=None으로 설정하여 전체 기록을 가져옴
-            sort_asc=True # 👈 채팅 기록은 시간 순서(오름차순)가 중요
+            self.db, conversation_id=conversation_id, limit=None, sort_asc=True
         )
-        
-        # 페르소나의 시스템 프롬프트 가져오기
         system_prompt = db_conversation.persona.system_prompt
 
-        # GeminiService 호출
-        ai_response_content, token_usage = await self.gemini_service.get_chat_response(
-            system_prompt=system_prompt,
-            history=history,
-            user_message=user_db_message.content
-        )
+        try:
+            gemini_response: GeminiChatResponse = await self.gemini_service.get_chat_response(
+                system_prompt=system_prompt,
+                history=history,
+                user_message=user_db_message.content
+            )
+        except (ConnectionError, HTTPException) as e:
+            # Gemini 서비스 자체의 오류를 그대로 클라이언트에 전달
+            detail = e.detail if isinstance(e, HTTPException) else str(e)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
 
-        # 5. AI 응답 메시지 저장 (토큰 사용량 포함)
-        ai_message_in = MessageCreate(content=ai_response_content)
+        ai_message_in = MessageCreate(content=gemini_response.response)
         ai_db_message = crud_message.create_message(
             self.db,
             message_in=ai_message_in,
             conversation_id=conversation_id,
             sender_type=SenderType.AI,
-            gemini_token_usage=token_usage, # 👈 토큰 사용량 저장
+            gemini_token_usage=gemini_response.token_usage,
         )
+        crud_conversation.update_conversation_last_message_at(self.db, conversation_id)
 
-        # 6. 대화방의 last_message_at 다시 업데이트 (기존과 동일)
-        crud_conversation.update_conversation_last_message_at(
-            self.db, conversation_id=conversation_id
+        # ⭐️ 변경: 최종 반환 객체 생성
+        return ChatMessageResponse(
+            user_message=MessageResponse.model_validate(user_db_message),
+            ai_message=MessageResponse.model_validate(ai_db_message),
+            suggested_user_questions=gemini_response.suggested_user_questions,
+            is_ready_to_move_on=gemini_response.progress_check.is_ready_to_move_on,
         )
-
-        # 7. 최종 결과 반환 (기존과 동일)
-        user_message_response = MessageResponse.model_validate(user_db_message)
-        ai_message_response = MessageResponse.model_validate(ai_db_message)
-
-        return [user_message_response, ai_message_response]
 
     def create_system_message(self, conversation_id: int, content: str) -> Message:
         """

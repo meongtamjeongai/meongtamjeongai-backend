@@ -41,10 +41,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # --- 중요 설정값 로그 출력 추가 ---
     logger.info("--- Application Settings ---")
     logger.info(f"Project Name: {settings.PROJECT_NAME}")
-    logger.info(
-        f"Access Token Expire Minutes: {settings.ACCESS_TOKEN_EXPIRE_MINUTES}")
-    logger.info(
-        f"Refresh Token Expire Days: {settings.REFRESH_TOKEN_EXPIRE_DAYS}")
+    logger.info(f"Access Token Expire Minutes: {settings.ACCESS_TOKEN_EXPIRE_MINUTES}")
+    logger.info(f"Refresh Token Expire Days: {settings.REFRESH_TOKEN_EXPIRE_DAYS}")
     logger.info("--------------------------")
 
     # Firebase Admin SDK 초기화
@@ -59,7 +57,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("✅ Firebase Admin SDK already initialized.")
         except Exception as e:
             logger.error(
-                f"❌ Error initializing Firebase Admin SDK from path '{firebase_key_path}': {e}", exc_info=True)
+                f"❌ Error initializing Firebase Admin SDK from path '{firebase_key_path}': {e}",
+                exc_info=True,
+            )
     else:
         logger.warning(
             f"⚠️ Firebase service account key not found at '{firebase_key_path}'. "
@@ -71,8 +71,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             with db_engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
-                logger.info(
-                    "✅ Database connection test successful on startup.")
+                logger.info("✅ Database connection test successful on startup.")
         except Exception as e:
             logger.error(
                 f"❌ Database connection check failed on startup: {e}", exc_info=True
