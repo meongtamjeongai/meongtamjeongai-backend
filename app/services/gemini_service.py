@@ -3,8 +3,8 @@ import os
 import logging
 from typing import List, Tuple
 
-import google.generativeai as genai
-from google.generativeai import types
+from google import genai
+from google.genai import types
 
 from app.models.message import Message as MessageModel, SenderType
 
