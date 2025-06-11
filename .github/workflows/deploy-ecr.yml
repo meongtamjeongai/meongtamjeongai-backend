@@ -32,6 +32,10 @@ env:
   CONTAINER_NAME: fastapi_app_container                 # 컨테이너 이름 변경
   HOST_PORT: ${{ secrets.BACKEND_HOST_PORT }}
   CONTAINER_PORT: ${{ secrets.BACKEND_CONTAINER_PORT }}
+  DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+  SECRET_KEY: ${{ secrets.PROD_SECRET_KEY }}
+  FIREBASE_B64_JSON: ${{ secrets.PROD_FIREBASE_B64_JSON }}
+  GEMINI_API_KEY: ${{ secrets.PROD_GEMINI_API_KEY }}
 
 jobs:
   print_run_info:
@@ -118,6 +122,12 @@ jobs:
           sudo docker run -d \
             --name __CONTAINER_NAME__ \
             -p __HOST_PORT__:__CONTAINER_PORT__ \
+            -e APP_ENV="prod" \
+            -e DATABASE_URL="__DATABASE_URL__" \
+            -e SECRET_KEY="__SECRET_KEY__" \
+            -e FIREBASE_SERVICE_ACCOUNT_KEY_PATH="/tmp/firebase_service_account.json" \
+            -e FIREBASE_SERVICE_ACCOUNT_KEY_JSON_BASE64="__FIREBASE_B64_JSON__" \
+            -e GEMINI_API_KEY="__GEMINI_API_KEY__" \
             --restart always \
             __FULL_IMAGE_URI__
 
