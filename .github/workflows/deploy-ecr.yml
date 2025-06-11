@@ -82,6 +82,8 @@ jobs:
           tags: |
             ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_VERSION }}
             ${{ env.ECR_REPOSITORY_URL }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # ⭐️ SSM Send-Command 스크립트 수정 (새로운 변수 체계 적용)
       - name: Deploy to EC2 instance via SSM
