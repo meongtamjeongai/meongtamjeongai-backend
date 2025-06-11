@@ -148,6 +148,9 @@ jobs:
           COMMAND_SCRIPT="${COMMAND_SCRIPT//__HOST_PORT__/${HOST_PORT}}"
           COMMAND_SCRIPT="${COMMAND_SCRIPT//__CONTAINER_PORT__/${CONTAINER_PORT}}"
           COMMAND_SCRIPT="${COMMAND_SCRIPT//__FIREBASE_B64_JSON__/${FIREBASE_B64_JSON}}"
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__DATABASE_URL__/${DATABASE_URL}}"
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__GEMINI_API_KEY__/${GEMINI_API_KEY}}"
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__SECRET_KEY__/${SECRET_KEY}}"
           
           # SSM 파라미터 생성 및 전송
           SSM_PARAMETERS=$(jq -n --arg script "$COMMAND_SCRIPT" '{ "commands": ($script | split("\n")) }')
