@@ -62,7 +62,9 @@ def initialize_database(db: Session) -> None:
     print("🗑️ 기존 데이터를 삭제하는 중...")
     db.query(Message).delete(synchronize_session=False)
     db.query(Conversation).delete(synchronize_session=False)
-    db.query(User).delete(synchronize_session=False)  # User를 삭제하면 social_accounts 등도 cascade로 삭제됨
+    db.query(User).delete(
+        synchronize_session=False
+    )  # User를 삭제하면 social_accounts 등도 cascade로 삭제됨
     db.query(Persona).delete(synchronize_session=False)
     db.query(PhishingCase).delete(synchronize_session=False)
     db.commit()
@@ -82,16 +84,24 @@ def initialize_database(db: Session) -> None:
     # 4. 테스트 페르소나 생성
     print("\n🤖 테스트 페르소나를 생성하는 중...")
     persona_in = PersonaCreate(**TEST_PERSONA_DATA)
-    test_persona = crud_persona.create_persona(db, persona_in=persona_in, creator_id=test_user.id)
-    print(f"✅ 테스트 페르소나 생성 완료 (ID: {test_persona.id}, Name: {test_persona.name})")
+    test_persona = crud_persona.create_persona(
+        db, persona_in=persona_in, creator_id=test_user.id
+    )
+    print(
+        f"✅ 테스트 페르소나 생성 완료 (ID: {test_persona.id}, Name: {test_persona.name})"
+    )
 
     # 5. 테스트 피싱 사례 생성
     print("\n🎣 테스트 피싱 사례를 생성하는 중...")
     case_in = PhishingCaseCreate(**TEST_PHISHING_CASE_DATA)
     test_case = crud_phishing.create_phishing_case(db, case_in=case_in)
-    print(f"✅ 테스트 피싱 사례 생성 완료 (ID: {test_case.id}, Title: {test_case.title})")
+    print(
+        f"✅ 테스트 피싱 사례 생성 완료 (ID: {test_case.id}, Title: {test_case.title})"
+    )
 
-    print("\n--- 🎉 모든 데이터베이스 초기화 및 테스트 데이터 생성이 완료되었습니다. ---")
+    print(
+        "\n--- 🎉 모든 데이터베이스 초기화 및 테스트 데이터 생성이 완료되었습니다. ---"
+    )
 
 
 async def main():

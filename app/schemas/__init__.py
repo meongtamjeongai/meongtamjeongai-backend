@@ -17,6 +17,12 @@ from .persona import (
     PersonaResponse,
     PersonaUpdate,
 )
+from .phishing import (
+    PhishingCaseCreate,
+    PhishingCaseResponse,
+    PhishingCaseUpdate,
+    PhishingCategoryResponse,
+)
 from .social_account import (
     SocialAccountBase,
     SocialAccountCreate,
@@ -66,4 +72,8 @@ __all__ = [
     "UserPointResponse",
     "GeminiChatResponse",
     "GeminiProgressCheck",
+    "PhishingCategoryResponse",
+    "PhishingCaseCreate",
+    "PhishingCaseUpdate",
+    "PhishingCaseResponse",
 ]
