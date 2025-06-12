@@ -6,7 +6,7 @@ from typing import List
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.crud import crud_conversation, crud_message
+from app.crud import crud_conversation, crud_message, crud_phishing
 from app.models.message import Message, SenderType
 from app.models.user import User
 from app.schemas.gemini import GeminiChatResponse  # ⭐️ GeminiChatResponse 임포트
@@ -81,9 +81,8 @@ class MessageService:
 
     async def send_new_message(
         self, conversation_id: int, message_in: MessageCreate, current_user: User
-    ) -> (
-        ChatMessageResponse
-    ):  # ⭐️ 변경: 반환 타입을 List에서 ChatMessageResponse로 변경
+    ) -> ChatMessageResponse:
+        # 1. 대화방 존재 및 사용자 접근 권한 확인
         db_conversation = crud_conversation.get_conversation(
             self.db, conversation_id=conversation_id, user_id=current_user.id
         )
@@ -93,26 +92,46 @@ class MessageService:
                 detail="Conversation not found or not accessible.",
             )
 
+        # 2. 사용자 메시지를 DB에 저장
         user_db_message = crud_message.create_message(
             self.db,
             message_in=message_in,
             conversation_id=conversation_id,
             sender_type=SenderType.USER,
         )
+        # 대화방의 마지막 메시지 시간 업데이트
         crud_conversation.update_conversation_last_message_at(self.db, conversation_id)
 
-        # ⭐️ 변경: Gemini 호출 및 결과 처리 로직
+        # 3. AI 응답 생성을 위한 준비
+        # 전체 대화 기록을 시간순으로 가져오기
         history = crud_message.get_messages_by_conversation(
             self.db, conversation_id=conversation_id, limit=None, sort_asc=True
         )
+        # 페르소나의 기본 시스템 프롬프트 가져오기
         system_prompt = db_conversation.persona.system_prompt
 
+        # 대화 시작 시 랜덤 피싱 시나리오 가져오기
+        random_phishing_case = None
+        # 대화 기록에 사용자 메시지 하나만 있는 경우 (대화의 시작)
+        if len(history) == 1:
+            random_phishing_case = crud_phishing.get_random_phishing_case(self.db)
+            if random_phishing_case:
+                # (디버깅용) 어떤 시나리오가 로드되었는지 서버 로그에 출력
+                print(
+                    f"✅ [AI 시나리오] 피싱 사례 로드 성공 (ID: {random_phishing_case.id}, 제목: {random_phishing_case.title})"
+                )
+            else:
+                print("⚠️ [AI 시나리오] 로드할 피싱 사례를 찾지 못했습니다.")
+
+        # 4. Gemini 서비스를 호출하여 AI 응답 생성
         try:
             gemini_response: GeminiChatResponse = (
                 await self.gemini_service.get_chat_response(
                     system_prompt=system_prompt,
                     history=history,
                     user_message=user_db_message.content,
+                    # 조회된 피싱 사례를 Gemini 서비스로 전달
+                    phishing_case=random_phishing_case,
                 )
             )
         except (ConnectionError, HTTPException) as e:
@@ -122,6 +141,7 @@ class MessageService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
             )
 
+        # 5. AI의 응답을 DB에 저장
         ai_message_in = MessageCreate(content=gemini_response.response)
         ai_db_message = crud_message.create_message(
             self.db,
@@ -130,9 +150,10 @@ class MessageService:
             sender_type=SenderType.AI,
             gemini_token_usage=gemini_response.token_usage,
         )
+        # 대화방의 마지막 메시지 시간 다시 업데이트
         crud_conversation.update_conversation_last_message_at(self.db, conversation_id)
 
-        # ⭐️ 변경: 최종 반환 객체 생성
+        # 6. 최종 응답 객체를 생성하여 반환
         return ChatMessageResponse(
             user_message=MessageResponse.model_validate(user_db_message),
             ai_message=MessageResponse.model_validate(ai_db_message),

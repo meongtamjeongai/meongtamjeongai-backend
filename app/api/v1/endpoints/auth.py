@@ -2,7 +2,6 @@
 # 인증 관련 API 엔드포인트 정의
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
-
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -44,8 +43,7 @@ async def login_with_firebase_id_token(
 
     user, service_token = result
 
-    print(
-        f"API: User {user.id} authenticated via Firebase. Returning service tokens.")
+    print(f"API: User {user.id} authenticated via Firebase. Returning service tokens.")
     return service_token
 
 
@@ -87,11 +85,10 @@ async def refresh_access_token(
     "/token",
     response_model=Token,
     summary="이메일/비밀번호 기반 로그인 (관리자용)",
-    description="이메일과 비밀번호로 로그인하여 서비스 JWT를 발급받습니다."
+    description="이메일과 비밀번호로 로그인하여 서비스 JWT를 발급받습니다.",
 )
 async def login_for_access_token(
-    db: Session = Depends(get_db),
-    form_data: OAuth2PasswordRequestForm = Depends()
+    db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ):
     """
     OAuth2 호환 폼 데이터(username, password)로 사용자를 인증합니다.

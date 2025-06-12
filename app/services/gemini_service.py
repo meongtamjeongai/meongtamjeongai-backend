@@ -3,7 +3,7 @@
 import json
 import logging
 import os
-from typing import List
+from typing import List, Optional
 
 from fastapi import HTTPException, status
 from google import genai
@@ -12,6 +12,7 @@ from google.genai import types
 
 from app.models.message import Message as MessageModel
 from app.models.message import SenderType
+from app.models.phishing_case import PhishingCase
 from app.schemas.gemini import GeminiChatResponse
 
 # 로거 설정
@@ -45,7 +46,11 @@ class GeminiService:
         return self.client is not None
 
     async def get_chat_response(
-        self, system_prompt: str, history: List[MessageModel], user_message: str
+        self,
+        system_prompt: str,
+        history: List[MessageModel],
+        user_message: str,
+        phishing_case: Optional[PhishingCase] = None,
     ) -> GeminiChatResponse:
         if not self.is_available():
             logger.error(
@@ -56,6 +61,22 @@ class GeminiService:
             )
 
         try:
+            # ⭐️ 피싱 시나리오를 바탕으로 최종 시스템 프롬프트를 구성
+            final_system_prompt = system_prompt
+            if phishing_case:
+                # PhishingCase 객체에서 필요한 정보를 추출하여 프롬프트에 주입
+                phishing_info = f"""
+---
+[오늘의 피싱 학습 시나리오]
+너는 지금부터 아래 정보를 바탕으로 사용자에게 피싱 공격을 시도하는 역할을 맡아야 해. 자연스러운 대화를 통해 아래 시나리오의 목적을 달성해줘.
+
+- 유형: {phishing_case.category.description if phishing_case.category else "일반 사기"}
+- 제목: {phishing_case.title}
+- 핵심 내용: {phishing_case.content}
+---
+"""
+                final_system_prompt += phishing_info
+
             # 1. 대화 기록을 genai.types.Content 객체 리스트로 재구성
             reconstructed_history = []
             for msg in history:
@@ -70,7 +91,8 @@ class GeminiService:
             contents_for_counting = (
                 [
                     types.Content(
-                        role="user", parts=[types.Part.from_text(text=system_prompt)]
+                        role="user",
+                        parts=[types.Part.from_text(text=final_system_prompt)],
                     ),
                     types.Content(
                         role="model",
@@ -90,7 +112,8 @@ class GeminiService:
             )
 
             token_count_response = await self.client.aio.models.count_tokens(
-                model="models/gemini-1.5-flash-latest", contents=contents_for_counting
+                model="models/gemini-2.5-flash-preview-05-20",
+                contents=contents_for_counting,
             )
             total_tokens = token_count_response.total_tokens
 
@@ -107,9 +130,9 @@ class GeminiService:
                 ):
                     response_schema["required"].remove("token_usage")
 
-            # 4. ⭐️ 수정: generate_content에 전달할 config 객체를 생성합니다.
+            # 4. ⭐️ [변경] generate_content에 전달할 config 객체를 생성
             generation_config = types.GenerateContentConfig(
-                system_instruction=system_prompt,
+                system_instruction=final_system_prompt,  # ⭐️ 수정된 최종 프롬프트 사용
                 response_mime_type="application/json",
                 response_schema=response_schema,
                 temperature=0.7,
@@ -122,9 +145,9 @@ class GeminiService:
                 )
             ]
 
-            # 6. ⭐️ 수정: 'config' 파라미터에 위에서 생성한 객체를 전달합니다.
+            # 6. ⭐️ [변경] 'config' 파라미터에 위에서 생성한 객체를 전달
             response = await self.client.aio.models.generate_content(
-                model="models/gemini-1.5-flash-latest",
+                model="models/gemini-2.5-flash-preview-05-20",
                 contents=contents_for_generation,
                 config=generation_config,
             )
@@ -134,6 +157,14 @@ class GeminiService:
             json_response["token_usage"] = total_tokens
 
             logger.info(f"✅ Gemini API call successful. Tokens used: {total_tokens}")
+
+            logger.info("=" * 50)
+            logger.info(
+                f"🚀 최종 시스템 프롬프트 (To Gemini API for Conv ID: {history[0].conversation_id if history else 'N/A'})"
+            )
+            logger.info(final_system_prompt)
+            logger.info("=" * 50)
+
             return GeminiChatResponse(**json_response)
 
         except (
