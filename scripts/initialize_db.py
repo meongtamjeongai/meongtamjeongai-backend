@@ -1,4 +1,7 @@
 # scripts/initialize_db.py
+
+# ❌ 개발용도로만 사용해야함! 이 스크립트는 데이터베이스를 초기화하고 테스트 데이터를 생성합니다.
+
 import asyncio
 import sys
 from pathlib import Path
@@ -76,6 +79,7 @@ def initialize_database(db: Session) -> None:
     print("✅ 피싱 카테고리 생성 완료.")
 
     # 3. 테스트 사용자 생성
+    # passlib[bcrypt] 라이브러리에 의해 버전 에러가 발생하지만 일단은 정상 작동하므로 무시합니다.
     print("\n👤 테스트 사용자를 생성하는 중...")
     user_in = UserCreate(**TEST_USER_DATA)
     test_user = crud_user.create_user(db, user_in=user_in)

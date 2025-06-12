@@ -38,5 +38,7 @@ class Settings(BaseSettings):
     FIREBASE_SERVICE_ACCOUNT_KEY_PATH: str
     FIREBASE_SERVICE_ACCOUNT_KEY_JSON_BASE64: str | None = None
 
+    # AWS S3
+    S3_BUCKET_NAME: str | None = None
 
 settings = Settings()

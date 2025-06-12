@@ -43,6 +43,8 @@ class User(Base):
     )
     is_guest: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    profile_image_key: Mapped[str] = mapped_column(String(2048), nullable=True)
+
     # Relationships
     social_accounts: Mapped[List["SocialAccount"]] = relationship(
         "SocialAccount", back_populates="user", cascade="all, delete-orphan"

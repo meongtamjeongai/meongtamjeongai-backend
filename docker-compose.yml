@@ -8,8 +8,11 @@ services:
       dockerfile: Dockerfile
     volumes:
       - .:/workspace:cached
+      - ~/.aws:/home/vscode/.aws:ro
     env_file:
       - .env.dev
+    environment:
+      - AWS_PROFILE=meong-local-dev
     ports:
       - "8000:8000"
     depends_on:

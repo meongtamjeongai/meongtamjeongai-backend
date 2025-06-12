@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import Field, HttpUrl
+from pydantic import Field
 
 from app.schemas.base_schema import BaseModel
 
@@ -21,9 +21,9 @@ class PersonaCreatorInfo(BaseModel):
 class PersonaBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="페르소나의 이름")
     description: Optional[str] = Field(None, description="페르소나에 대한 설명")
-    profile_image_url: Optional[HttpUrl] = Field(
-        None, description="페르소나 프로필 이미지 URL"
-    )  # HttpUrl 타입 사용
+    profile_image_key: Optional[str] = Field(
+        None, description="S3에 저장된 프로필 이미지의 Object Key"
+    )
     system_prompt: str = Field(
         ..., description="Gemini API에 전달될 페르소나의 기본 지침"
     )
@@ -40,7 +40,7 @@ class PersonaUpdate(
 ):  # 전체 업데이트가 아닌 부분 업데이트를 위해 필드들을 Optional로
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
-    profile_image_url: Optional[HttpUrl] = None
+    profile_image_key: Optional[str] = None
     system_prompt: Optional[str] = None
     is_public: Optional[bool] = None
 

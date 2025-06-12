@@ -22,7 +22,7 @@ class Persona(Base):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, nullable=True)
-    profile_image_url: Mapped[str] = mapped_column(String(2048), nullable=True)
+    profile_image_key: Mapped[str] = mapped_column(String(2048), nullable=True)
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
 
     is_public: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

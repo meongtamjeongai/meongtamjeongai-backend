@@ -7,7 +7,9 @@ from .message_service import MessageService
 from .persona_service import PersonaService
 from .phishing_service import PhishingService
 from .user_service import UserService
+from .s3_service import S3Service
 
+# 이 파일은 서비스 클래스들을 모듈화하여 다른 곳에서 쉽게 임포트할 수 있도록 합니다.
 __all__ = [
     "AuthService",
     "PersonaService",
@@ -15,4 +17,5 @@ __all__ = [
     "MessageService",
     "UserService",
     "PhishingService",
+    "S3Service",
 ]

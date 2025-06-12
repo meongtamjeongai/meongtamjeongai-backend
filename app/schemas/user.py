@@ -18,6 +18,9 @@ class UserBase(BaseModel):
     is_active: bool = True  # 기본값을 True로 명시 (DB 모델과 일치)
     is_superuser: bool = False
     is_guest: bool = False
+    profile_image_key: Optional[str] = Field(
+        None, description="새로 업로드된 프로필 이미지의 S3 Object Key"
+    )
 
 
 # DB에 저장될 때 필요한 속성 (비밀번호 포함)
@@ -35,8 +38,10 @@ class UserInDBBase(UserBase):
         "from_attributes": True,
     }
 
+
 class UserDetailResponse(UserInDBBase):
     pass
+
 
 # 사용자 생성 시 요청 본문에 필요한 속성
 class UserCreate(UserBase):
@@ -54,6 +59,9 @@ class UserUpdate(BaseModel):
     password: Optional[str] = Field(None, min_length=8)  # 새 비밀번호
     is_active: Optional[bool] = None
     is_superuser: Optional[bool] = None
+    profile_image_key: Optional[str] = Field(
+        None, description="새로 업로드된 프로필 이미지의 S3 Object Key"
+    )
 
 
 # API 응답으로 기본적인 사용자 정보를 반환할 때 사용될 스키마 (비밀번호 제외)
@@ -72,6 +80,7 @@ class UserClientProfileResponse(BaseModel):
     id: int
     email: Optional[EmailStr] = None
     username: Optional[str] = None
+    profile_image_key: Optional[str] = None
     is_guest: bool
 
     # SQLAlchemy 모델의 관계 속성 ('social_accounts', 'user_point')을 매핑하기 위한 필드.

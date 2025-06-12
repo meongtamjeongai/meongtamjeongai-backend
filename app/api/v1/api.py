@@ -10,6 +10,7 @@ from app.api.v1.endpoints.conversations import router as conversations_router
 from app.api.v1.endpoints.personas import router as personas_router
 from app.api.v1.endpoints.phishing import router as phishing_router
 from app.api.v1.endpoints.users import router as users_router
+from app.api.v1.endpoints.storage import router as storage_router
 
 api_router_v1 = APIRouter()
 
@@ -26,4 +27,7 @@ api_router_v1.include_router(users_router, prefix="/users", tags=["사용자 (Us
 api_router_v1.include_router(admin_router, prefix="/admin", tags=["관리자 (Admin)"])
 api_router_v1.include_router(
     phishing_router, prefix="/phishing", tags=["피싱 정보 (Phishing Info)"]
+)
+api_router_v1.include_router(
+    storage_router, prefix="/storage", tags=["파일 스토리지 (Storage)"]
 )
