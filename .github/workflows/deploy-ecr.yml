@@ -36,6 +36,7 @@ env:
   SECRET_KEY: ${{ secrets.PROD_SECRET_KEY }}
   FIREBASE_B64_JSON: ${{ secrets.PROD_FIREBASE_B64_JSON }}
   GEMINI_API_KEY: ${{ secrets.PROD_GEMINI_API_KEY }}
+  S3_BUCKET_NAME : ${{ secrets.S3_BUCKET_NAME }}
 
 jobs:
   print_run_info:
@@ -128,6 +129,7 @@ jobs:
             -e FIREBASE_SERVICE_ACCOUNT_KEY_PATH="/tmp/firebase_service_account.json" \
             -e FIREBASE_SERVICE_ACCOUNT_KEY_JSON_BASE64=__FIREBASE_B64_JSON__ \
             -e GEMINI_API_KEY="__GEMINI_API_KEY__" \
+            -e S3_BUCKET_NAME="__S3_BUCKET_NAME__" \
             --restart always \
             __FULL_IMAGE_URI__
 
@@ -151,7 +153,8 @@ jobs:
           COMMAND_SCRIPT="${COMMAND_SCRIPT//__DATABASE_URL__/${DATABASE_URL}}"
           COMMAND_SCRIPT="${COMMAND_SCRIPT//__GEMINI_API_KEY__/${GEMINI_API_KEY}}"
           COMMAND_SCRIPT="${COMMAND_SCRIPT//__SECRET_KEY__/${SECRET_KEY}}"
-          
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__S3_BUCKET_NAME__/${S3_BUCKET_NAME}}"
+
           # SSM 파라미터 생성 및 전송
           SSM_PARAMETERS=$(jq -n --arg script "$COMMAND_SCRIPT" '{ "commands": ($script | split("\n")) }')
 
