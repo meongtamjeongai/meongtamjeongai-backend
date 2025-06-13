@@ -86,6 +86,7 @@ def get_upload_presigned_url(
 def get_download_presigned_url(
     object_key: str = Query(..., description="조회할 파일의 S3 객체 키"),
     s3_service: S3Service = Depends(S3Service),
+    current_user: UserModel = Depends(get_current_active_user),
 ):
     """
     S3에 저장된 비공개 파일을 조회(다운로드)할 수 있는 임시 URL을 발급받습니다.
