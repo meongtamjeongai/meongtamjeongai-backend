@@ -2,10 +2,10 @@
 import enum
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_superuser, get_current_active_user
 from app.models.user import User as UserModel
 from app.services.s3_service import S3Service
 
@@ -34,7 +34,9 @@ class PresignedUrlRequest(BaseModel):
 
 # 서버가 클라이언트에게 반환할 Presigned URL 응답 형식
 class PresignedUrlResponse(BaseModel):
-    url: str = Field(..., description="생성된 Presigned URL (이 URL로 직접 파일 업로드/다운로드)")
+    url: str = Field(
+        ..., description="생성된 Presigned URL (이 URL로 직접 파일 업로드/다운로드)"
+    )
     object_key: str = Field(..., description="S3에 저장될 객체의 최종 경로(key)")
 
 
@@ -96,3 +98,25 @@ def get_download_presigned_url(
     url = s3_service.generate_presigned_url(object_key=object_key, for_upload=False)
 
     return PresignedUrlResponse(url=url, object_key=object_key)
+
+
+@router.delete(
+    "/object",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="S3 객체 삭제 (관리자 전용)",
+    dependencies=[Depends(get_current_active_superuser)],  # 관리자만 호출 가능
+)
+def delete_s3_storage_object(
+    object_key: str = Query(..., description="삭제할 파일의 S3 객체 키"),
+    s3_service: S3Service = Depends(S3Service),
+):
+    """
+    S3 버킷에서 특정 객체를 영구적으로 삭제합니다.
+    """
+    success = s3_service.delete_object(object_key=object_key)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete object '{object_key}' from S3.",
+        )
+    return None  # 성공 시 204 No Content 응답

@@ -1,12 +1,14 @@
 # app/services/s3_service.py
 import logging
+
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, NoCredentialsError
 from fastapi import HTTPException, status
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
 
 class S3Service:
     def __init__(self):
@@ -15,7 +17,9 @@ class S3Service:
         self.s3_client = boto3.client("s3", region_name="ap-northeast-2")
         self.bucket_name = settings.S3_BUCKET_NAME
 
-    def generate_presigned_url(self, object_key: str, expiration: int = 3600, for_upload: bool = True) -> str:
+    def generate_presigned_url(
+        self, object_key: str, expiration: int = 3600, for_upload: bool = True
+    ) -> str:
         """
         S3 Presigned URL을 생성합니다.
         :param object_key: S3 버킷 내 객체의 경로 (예: 'images/personas/my-image.jpg')
@@ -30,21 +34,72 @@ class S3Service:
             )
 
         http_method = "put_object" if for_upload else "get_object"
-        
+
         try:
+            logger.info(
+                f"🚀 S3 Presigned URL 생성 시도: Bucket={self.bucket_name}, Key={object_key}, Method={http_method}"
+            )
             url = self.s3_client.generate_presigned_url(
                 ClientMethod=http_method,
                 Params={"Bucket": self.bucket_name, "Key": object_key},
                 ExpiresIn=expiration,
-                HttpMethod="PUT" if for_upload else "GET"
+                HttpMethod="PUT" if for_upload else "GET",
             )
-            logger.info(f"Successfully generated presigned URL for {object_key} (Method: {http_method.upper()})")
+            logger.info(f"✅ S3 Presigned URL 생성 성공: {url[:70]}...")
             return url
-        except ClientError as e:
-            logger.error(f"Failed to generate presigned URL for {object_key}: {e}", exc_info=True)
+
+        # ⭐️ [수정] boto3 클라이언트 에러를 더 상세하게 잡습니다.
+        except NoCredentialsError:
+            # AWS 자격 증명을 전혀 찾지 못한 경우 (가장 흔한 로컬 환경 문제)
+            logger.error(
+                "🔥🔥🔥 [FATAL] AWS 자격 증명을 찾을 수 없습니다! (NoCredentialsError). "
+                "EC2 인스턴스에 IAM 역할이 연결되었는지, 또는 로컬에 AWS 자격증명(~/.aws/credentials)이 설정되었는지 확인하세요.",
+                exc_info=True,
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could not generate file upload/download URL.",
+                detail="Server is not configured for AWS access. Please contact administrator.",
             )
+
+        except ClientError as e:
+            # 자격 증명은 찾았지만, 권한이 없거나 다른 API 오류가 발생한 경우
+            error_code = e.response.get("Error", {}).get("Code")
+            error_message = e.response.get("Error", {}).get("Message")
+            logger.error(
+                f"🔥🔥🔥 S3 Presigned URL 생성 실패 (ClientError): Code={error_code}, Message='{error_message}'",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Could not generate file URL due to a server-side S3 error: {error_code}",
+            )
+
+    def delete_object(self, object_key: str) -> bool:
+        """
+        S3 버킷에서 특정 객체를 삭제합니다.
+        :param object_key: 삭제할 객체의 키
+        :return: 성공 시 True, 실패 시 False
+        """
+        if not self.bucket_name:
+            logger.error(
+                "S3Service: Cannot delete object, bucket name is not configured."
+            )
+            return False
+
+        try:
+            logger.info(
+                f"🚀 S3 객체 삭제 시도: Bucket={self.bucket_name}, Key={object_key}"
+            )
+            self.s3_client.delete_object(Bucket=self.bucket_name, Key=object_key)
+            logger.info(f"✅ S3 객체 삭제 성공: Key={object_key}")
+            return True
+        except ClientError as e:
+            logger.error(
+                f"🔥 S3 객체 삭제 실패 (ClientError): Key={object_key}, Error={e}",
+                exc_info=True,
+            )
+            # 존재하지 않는 객체를 삭제 시도해도 에러가 발생하지 않으므로, 대부분 권한 문제.
+            return False
+
 
 s3_service = S3Service()

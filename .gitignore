@@ -4,6 +4,9 @@ __pycache__/
 *$py.class
 .DS_Store
 
+aws
+aws/*
+
 debug
 debug/*.
 
@@ -30,5 +33,6 @@ firebase-service-account.json
 
 # Environments
 .env
+.env.dev
 +.env.*
 !*.env.example
