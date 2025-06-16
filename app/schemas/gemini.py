@@ -12,7 +12,7 @@ class GeminiProgressCheck(BaseModel):
 class GeminiChatResponse(BaseModel):
     """Gemini 모델로부터 받을 구조화된 JSON 응답 스키마"""
     response: str = Field(..., description="사용자 질문에 대한 AI의 핵심 답변")
-    suggested_user_questions: List[str] = Field(..., description="사용자가 다음에 할 법한 질문 제안 목록")
+    suggested_user_questions: List[str] = Field(..., description="사용자가 다음에 할 법한 질문 제안 목록(최대 3개)")
     progress_check: GeminiProgressCheck = Field(..., description="대화 진행 상태 점검 결과")
     token_usage: int = Field(..., description="이번 응답 생성에 사용된 총 토큰 수")
     session_end_message: Optional[str] = Field(None, description="대화가 끝날 때 표시할 최종 메시지")

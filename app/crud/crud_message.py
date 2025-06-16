@@ -43,7 +43,7 @@ def get_messages_by_conversation(
     # ⭐️ limit이 None이 아닐 때만 limit을 적용
     if limit is not None:
         query = query.limit(limit)
-        
+
     return query.all()
 
 
@@ -54,6 +54,7 @@ def create_message(
     conversation_id: int,
     sender_type: SenderType,
     gemini_token_usage: Optional[int] = None,
+    applied_phishing_case_id: Optional[int] = None,
 ) -> Message:
     """
     새로운 메시지를 생성하고 특정 대화방에 추가합니다.
@@ -63,6 +64,7 @@ def create_message(
         sender_type=sender_type,
         content=message_in.content,  # MessageCreate 스키마에는 content만 있음
         gemini_token_usage=gemini_token_usage,
+        applied_phishing_case_id=applied_phishing_case_id,
     )
     db.add(db_message)
     db.commit()

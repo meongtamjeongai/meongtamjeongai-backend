@@ -2,11 +2,14 @@
 # Message 모델 관련 Pydantic 스키마
 
 from datetime import datetime
+from typing import List, Optional
+
 from pydantic import Field
 
 from app.models.message import SenderType  # Enum 임포트
 from app.schemas.base_schema import BaseModel
-from typing import List, Optional
+from app.schemas.phishing import PhishingCaseResponse
+
 
 class MessageBase(BaseModel):
     content: str = Field(..., description="메시지 내용")
@@ -26,6 +29,8 @@ class MessageResponse(MessageBase):
     gemini_token_usage: Optional[int] = None
     created_at: datetime
 
+    applied_phishing_case: Optional[PhishingCaseResponse] = None
+
     # Pydantic V2
     model_config = {
         "from_attributes": True,
@@ -38,7 +43,16 @@ class MessageResponse(MessageBase):
 # AI 응답과 함께 사용자 메시지도 반환하는 경우 (예시)
 class ChatMessageResponse(BaseModel):
     """메시지 전송 후 클라이언트에 반환될 최종 응답 스키마"""
-    user_message: MessageResponse = Field(..., description="사용자가 보낸 메시지에 대한 DB 저장 결과")
-    ai_message: MessageResponse = Field(..., description="AI가 응답한 메시지에 대한 DB 저장 결과")
-    suggested_user_questions: List[str] = Field(..., description="사용자가 다음에 할 법한 질문 제안 목록")
-    is_ready_to_move_on: bool = Field(..., description="다음 주제로 넘어갈 준비가 되었는지 여부")
+
+    user_message: MessageResponse = Field(
+        ..., description="사용자가 보낸 메시지에 대한 DB 저장 결과"
+    )
+    ai_message: MessageResponse = Field(
+        ..., description="AI가 응답한 메시지에 대한 DB 저장 결과"
+    )
+    suggested_user_questions: List[str] = Field(
+        ..., description="사용자가 다음에 할 법한 질문 제안 목록(최대 3개)"
+    )
+    is_ready_to_move_on: bool = Field(
+        ..., description="다음 주제로 넘어갈 준비가 되었는지 여부"
+    )
