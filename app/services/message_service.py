@@ -151,9 +151,6 @@ class MessageService:
             conversation_id=conversation_id,
             sender_type=SenderType.AI,
             gemini_token_usage=gemini_response.token_usage,
-            applied_phishing_case_id=random_phishing_case.id
-            if random_phishing_case
-            else None,
         )
         # 대화방의 마지막 메시지 시간 다시 업데이트
         crud_conversation.update_conversation_last_message_at(self.db, conversation_id)

@@ -1,7 +1,7 @@
 # fastapi_backend/app/models/message.py
 
 import enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Text, func
 from sqlalchemy import Enum as SQLAlchemyEnum
@@ -11,7 +11,7 @@ from .base import Base
 
 if TYPE_CHECKING:
     from .conversation import Conversation
-    from .phishing_case import PhishingCase
+
 
 class SenderType(str, enum.Enum):
     USER = "user"
@@ -43,16 +43,10 @@ class Message(Base):
         DateTime, default=func.now(), server_default=func.now(), index=True
     )
 
-    applied_phishing_case_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("phishing_cases.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-
     # Relationships
     conversation: Mapped["Conversation"] = relationship(
         "Conversation", back_populates="messages"
     )
-
-    applied_phishing_case: Mapped[Optional["PhishingCase"]] = relationship("PhishingCase")
 
     def __repr__(self):
         return f"<Message(id={self.id}, conversation_id={self.conversation_id}, sender_type='{self.sender_type.value}')>"
