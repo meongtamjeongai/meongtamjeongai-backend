@@ -5,6 +5,8 @@ import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+from pydantic import BaseModel
+
 import firebase_admin
 from fastapi import Depends, FastAPI, HTTPException
 from firebase_admin import credentials
@@ -105,6 +107,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# 버전 정보 응답을 위한 Pydantic 모델
+class VersionResponse(BaseModel):
+    project_name: str
+    version: str
+
+@app.get("/version", response_model=VersionResponse, tags=["기본"])
+async def get_version():
+    """
+    애플리케이션의 이름과 버전 정보를 반환합니다.
+    """
+    return VersionResponse(
+        project_name=settings.PROJECT_NAME,
+        version="0.1.0"
+    )
+
 # --- 미들웨어 및 예외 핸들러 등록 ---
 app.add_middleware(LoggingMiddleware)
 add_exception_handlers(app)
@@ -137,3 +154,4 @@ async def get_db_status(db: SQLAlchemySession = Depends(get_db)):
         raise HTTPException(
             status_code=500, detail=f"An unexpected error occurred: {str(e)}"
         )
+
