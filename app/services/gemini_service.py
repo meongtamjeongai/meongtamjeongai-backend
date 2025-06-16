@@ -52,6 +52,7 @@ class GeminiService:
         history: List[MessageModel],
         user_message: str,
         phishing_case: Optional[PhishingCase] = None,
+        starting_message: Optional[str] = None,
     ) -> Tuple[GeminiChatResponse, List[Dict[str, Any]]]:
         if not self.is_available():
             logger.error(
@@ -88,29 +89,41 @@ class GeminiService:
                     )
                 )
 
-            # 2. 토큰 계산을 위한 contents 리스트 생성
-            contents_for_counting = (
-                [
-                    types.Content(
-                        role="user",
-                        parts=[types.Part.from_text(text=final_system_prompt)],
-                    ),
+            # 시스템 프롬프트는 항상 기본으로 포함
+            contents_for_generation = []
+
+            # ✨ 시작 메시지가 있고, 실제 DB 대화 기록이 비어있을 때만 주입
+            if starting_message and not history:
+                # AI의 첫 발언으로 취급 (role='model')
+                contents_for_generation.append(
                     types.Content(
                         role="model",
-                        parts=[
-                            types.Part.from_text(
-                                text="네, 알겠습니다. 당신의 지시에 따르겠습니다."
-                            )
-                        ],
-                    ),
-                ]
-                + reconstructed_history
-                + [
-                    types.Content(
-                        role="user", parts=[types.Part.from_text(text=user_message)]
+                        parts=[types.Part.from_text(text=starting_message)],
                     )
-                ]
+                )
+
+            # 실제 대화 기록과 현재 사용자 메시지를 추가
+            contents_for_generation.extend(reconstructed_history)
+            contents_for_generation.append(
+                types.Content(
+                    role="user", parts=[types.Part.from_text(text=user_message)]
+                )
             )
+
+            # 토큰 계산을 위한 contents는 시스템 프롬프트 + 생성용 contents로 구성
+            contents_for_counting = [
+                types.Content(
+                    role="user", parts=[types.Part.from_text(text=final_system_prompt)]
+                ),
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part.from_text(
+                            text="네, 알겠습니다. 당신의 지시에 따르겠습니다."
+                        )
+                    ],
+                ),
+            ] + contents_for_generation
 
             token_count_response = await self.client.aio.models.count_tokens(
                 model=settings.GEMINI_MODEL_NAME,

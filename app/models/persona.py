@@ -1,17 +1,24 @@
-# fastapi_backend/app/models/persona.py
+# app/models/persona.py
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-# 상대 경로 임포트로 수정
 from .base import Base
 
 if TYPE_CHECKING:
-    # 상대 경로 임포트로 수정
-    from .conversation import Conversation  # noqa: F401
-    from .user import User  # noqa: F401
+    from .conversation import Conversation
+    from .user import User
 
 
 class Persona(Base):
@@ -25,7 +32,15 @@ class Persona(Base):
     profile_image_key: Mapped[str] = mapped_column(String(2048), nullable=True)
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
 
-    is_public: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    starting_message: Mapped[str] = mapped_column(
+        Text, nullable=True, comment="페르소나의 첫 시작 메시지"
+    )
+    conversation_starters: Mapped[List[str]] = mapped_column(
+        JSON, nullable=True, comment="대화 시작 선택지 목록 (JSON 배열)"
+    )
+
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False)
     created_by_user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -41,7 +56,7 @@ class Persona(Base):
         server_onupdate=func.now(),
     )
 
-    # Relationships
+    # Relationships (변경 없음)
     creator: Mapped["User"] = relationship(
         "User", back_populates="created_personas", foreign_keys=[created_by_user_id]
     )

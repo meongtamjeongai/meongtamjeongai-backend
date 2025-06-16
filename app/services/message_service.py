@@ -91,23 +91,27 @@ class MessageService:
                 detail="Conversation not found or not accessible.",
             )
 
-        # 2. 사용자 메시지를 DB에 저장
+        # 2. AI 응답 생성을 위한 준비
+        # 전체 대화 기록을 시간순으로 가져오기
+        history = crud_message.get_messages_by_conversation(
+            self.db, conversation_id=conversation_id, limit=None, sort_asc=True
+        )
+
+        # 3. 사용자 메시지를 DB에 저장
         user_db_message = crud_message.create_message(
             self.db,
             message_in=message_in,
             conversation_id=conversation_id,
             sender_type=SenderType.USER,
         )
+
         # 대화방의 마지막 메시지 시간 업데이트
         crud_conversation.update_conversation_last_message_at(self.db, conversation_id)
 
-        # 3. AI 응답 생성을 위한 준비
-        # 전체 대화 기록을 시간순으로 가져오기
-        history = crud_message.get_messages_by_conversation(
-            self.db, conversation_id=conversation_id, limit=None, sort_asc=True
-        )
-        # 페르소나의 기본 시스템 프롬프트 가져오기
-        system_prompt = db_conversation.persona.system_prompt
+        # 페르소나 객체에서 필요한 모든 정보를 가져옵니다.
+        persona = db_conversation.persona
+        system_prompt = persona.system_prompt
+        starting_message = persona.starting_message
 
         # 대화에 적용된 피싱 시나리오를 확인하고, 없으면 새로 할당합니다.
         phishing_case_to_apply = db_conversation.applied_phishing_case
@@ -138,6 +142,7 @@ class MessageService:
                 history=history,
                 user_message=user_db_message.content,
                 phishing_case=phishing_case_to_apply,
+                starting_message=starting_message,
             )
 
         except (ConnectionError, HTTPException) as e:
@@ -156,6 +161,7 @@ class MessageService:
             sender_type=SenderType.AI,
             gemini_token_usage=gemini_response.token_usage,
         )
+
         # 대화방의 마지막 메시지 시간 다시 업데이트
         crud_conversation.update_conversation_last_message_at(self.db, conversation_id)
 

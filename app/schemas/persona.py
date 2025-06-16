@@ -2,7 +2,7 @@
 # Persona 모델 관련 Pydantic 스키마
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from pydantic import Field
 
@@ -19,13 +19,18 @@ class PersonaCreatorInfo(BaseModel):
 
 
 class PersonaBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100, description="페르소나의 이름")
+    name: str = Field(..., min_length=1, max_length=100,
+                      description="페르소나의 이름")
     description: Optional[str] = Field(None, description="페르소나에 대한 설명")
     profile_image_key: Optional[str] = Field(
         None, description="S3에 저장된 프로필 이미지의 Object Key"
     )
     system_prompt: str = Field(
         ..., description="Gemini API에 전달될 페르소나의 기본 지침"
+    )
+    starting_message: Optional[str] = Field(None, description="페르소나의 첫 시작 메시지")
+    conversation_starters: Optional[List[str]] = Field(
+        None, description="대화 시작 선택지 목록"
     )
     is_public: bool = True
 
@@ -42,6 +47,8 @@ class PersonaUpdate(
     description: Optional[str] = None
     profile_image_key: Optional[str] = None
     system_prompt: Optional[str] = None
+    starting_message: Optional[str] = None
+    conversation_starters: Optional[List[str]] = None
     is_public: Optional[bool] = None
 
 
@@ -56,6 +63,3 @@ class PersonaResponse(PersonaBase):
     model_config = {
         "from_attributes": True,
     }
-    # Pydantic V1
-    # class Config:
-    #     orm_mode = True
