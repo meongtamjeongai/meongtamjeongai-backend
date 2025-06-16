@@ -3,13 +3,14 @@
 import json
 import logging
 import os
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
 from google import genai
 from google.api_core import exceptions as google_api_exceptions
 from google.genai import types
 
+from app.core.config import settings
 from app.models.message import Message as MessageModel
 from app.models.message import SenderType
 from app.models.phishing_case import PhishingCase
@@ -51,7 +52,7 @@ class GeminiService:
         history: List[MessageModel],
         user_message: str,
         phishing_case: Optional[PhishingCase] = None,
-    ) -> GeminiChatResponse:
+    ) -> Tuple[GeminiChatResponse, List[Dict[str, Any]]]:
         if not self.is_available():
             logger.error(
                 "❌ GeminiService: Cannot get chat response, service is not available."
@@ -112,7 +113,7 @@ class GeminiService:
             )
 
             token_count_response = await self.client.aio.models.count_tokens(
-                model="models/gemini-2.5-flash-preview-05-20",
+                model=settings.GEMINI_MODEL_NAME,
                 contents=contents_for_counting,
             )
             total_tokens = token_count_response.total_tokens
@@ -147,7 +148,7 @@ class GeminiService:
 
             # 6. ⭐️ [변경] 'config' 파라미터에 위에서 생성한 객체를 전달
             response = await self.client.aio.models.generate_content(
-                model="models/gemini-2.5-flash-preview-05-20",
+                model=settings.GEMINI_MODEL_NAME,
                 contents=contents_for_generation,
                 config=generation_config,
             )
@@ -158,6 +159,14 @@ class GeminiService:
 
             logger.info(f"✅ Gemini API call successful. Tokens used: {total_tokens}")
 
+            debug_contents = [
+                {
+                    "role": content.role,
+                    "parts": [part.text for part in content.parts],
+                }
+                for content in contents_for_counting
+            ]
+
             logger.info("=" * 50)
             logger.info(
                 f"🚀 최종 시스템 프롬프트 (To Gemini API for Conv ID: {history[0].conversation_id if history else 'N/A'})"
@@ -165,7 +174,7 @@ class GeminiService:
             logger.info(final_system_prompt)
             logger.info("=" * 50)
 
-            return GeminiChatResponse(**json_response)
+            return GeminiChatResponse(**json_response), debug_contents
 
         except (
             google_api_exceptions.GoogleAPICallError,

@@ -10,9 +10,10 @@ from .base import Base
 
 if TYPE_CHECKING:
     # 상대 경로 임포트로 수정
-    from .message import Message  # noqa: F401
-    from .persona import Persona  # noqa: F401
-    from .user import User  # noqa: F401
+    from .message import Message
+    from .persona import Persona
+    from .phishing_case import PhishingCase
+    from .user import User
 
 
 class Conversation(Base):
@@ -32,6 +33,13 @@ class Conversation(Base):
     )
 
     title: Mapped[str] = mapped_column(String(255), nullable=True)
+
+    applied_phishing_case_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("phishing_cases.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     created_at: Mapped[DateTime] = mapped_column(
         DateTime, default=func.now(), server_default=func.now()
@@ -53,6 +61,10 @@ class Conversation(Base):
         back_populates="conversation",
         cascade="all, delete-orphan",
         order_by="Message.created_at",
+    )
+
+    applied_phishing_case: Mapped["PhishingCase"] = relationship(
+        "PhishingCase", lazy="joined"
     )
 
     def __repr__(self):

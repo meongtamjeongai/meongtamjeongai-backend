@@ -2,7 +2,7 @@
 # Message 모델 관련 Pydantic 스키마
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
@@ -32,12 +32,7 @@ class MessageResponse(MessageBase):
     applied_phishing_case: Optional[PhishingCaseResponse] = None
 
     # Pydantic V2
-    model_config = {
-        "from_attributes": True,
-    }
-    # Pydantic V1
-    # class Config:
-    #     orm_mode = True
+    model_config = {"from_attributes": True}
 
 
 # AI 응답과 함께 사용자 메시지도 반환하는 경우 (예시)
@@ -55,4 +50,7 @@ class ChatMessageResponse(BaseModel):
     )
     is_ready_to_move_on: bool = Field(
         ..., description="다음 주제로 넘어갈 준비가 되었는지 여부"
+    )
+    debug_request_contents: Optional[List[Dict[str, Any]]] = Field(
+        None, description="디버깅용: 토큰 계산에 사용된 실제 요청 컨텐츠"
     )

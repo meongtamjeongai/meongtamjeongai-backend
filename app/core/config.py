@@ -1,5 +1,6 @@
 # app/core/config.py
 import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_ENV = os.getenv("APP_ENV", "dev")
@@ -11,7 +12,7 @@ class Settings(BaseSettings):
         env_file=env_file_path if os.path.exists(env_file_path) else None,
         env_file_encoding="utf-8",
         case_sensitive=True,
-        extra="ignore"
+        extra="ignore",
     )
 
     # Application Settings
@@ -27,7 +28,7 @@ class Settings(BaseSettings):
     # JWT
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    
+
     # 필수 JWT 설정에 합리적인 기본값 추가
     # 이 값들은 실제 운영 시 Terraform을 통해 주입된 값으로 덮어쓰여집니다.
     # 이 기본값은 Alembic 실행 등, 모든 환경 변수가 필요 없는 컨텍스트에서 오류를 방지합니다.
@@ -40,5 +41,8 @@ class Settings(BaseSettings):
 
     # AWS S3
     S3_BUCKET_NAME: str | None = None
+
+    GEMINI_MODEL_NAME: str = "models/gemini-2.5-flash-preview-05-20"
+
 
 settings = Settings()

@@ -8,9 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.crud import crud_conversation, crud_message, crud_phishing
 from app.models.message import Message, SenderType
-from app.models.phishing_case import PhishingCase
 from app.models.user import User
-from app.schemas.gemini import GeminiChatResponse  # ⭐️ GeminiChatResponse 임포트
 from app.schemas.message import (  # ⭐️ ChatMessageResponse 임포트
     ChatMessageResponse,
     MessageCreate,
@@ -111,31 +109,37 @@ class MessageService:
         # 페르소나의 기본 시스템 프롬프트 가져오기
         system_prompt = db_conversation.persona.system_prompt
 
-        # 대화 시작 시 랜덤 피싱 시나리오 가져오기
-        random_phishing_case: Optional[PhishingCase] = None  # 👈 타입 힌트 명시
+        # 대화에 적용된 피싱 시나리오를 확인하고, 없으면 새로 할당합니다.
+        phishing_case_to_apply = db_conversation.applied_phishing_case
 
-        # 대화 기록에 사용자 메시지 하나만 있는 경우 (대화의 시작)
-        if len(history) == 1:
-            random_phishing_case = crud_phishing.get_random_phishing_case(self.db)
-            if random_phishing_case:
-                # (디버깅용) 어떤 시나리오가 로드되었는지 서버 로그에 출력
+        # 아직 적용된 시나리오가 없다면 (대화의 첫 시작)
+        if phishing_case_to_apply is None:
+            random_case = crud_phishing.get_random_phishing_case(self.db)
+            if random_case:
+                # 대화 객체에 피싱 사례 ID를 할당하고 DB에 저장
+                db_conversation.applied_phishing_case_id = random_case.id
+                self.db.add(db_conversation)
+                self.db.commit()
+                self.db.refresh(db_conversation)
+
+                # 이번 호출에서 사용할 시나리오로 설정
+                phishing_case_to_apply = db_conversation.applied_phishing_case
                 print(
-                    f"✅ [AI 시나리오] 피싱 사례 로드 성공 (ID: {random_phishing_case.id}, 제목: {random_phishing_case.title})"
+                    f"✅ [AI 시나리오] 대화(ID:{conversation_id})에 피싱 사례(ID:{random_case.id}) 신규 할당"
                 )
-            else:
-                print("⚠️ [AI 시나리오] 로드할 피싱 사례를 찾지 못했습니다.")
 
         # 4. Gemini 서비스를 호출하여 AI 응답 생성
         try:
-            gemini_response: GeminiChatResponse = (
-                await self.gemini_service.get_chat_response(
-                    system_prompt=system_prompt,
-                    history=history,
-                    user_message=user_db_message.content,
-                    # 조회된 피싱 사례를 Gemini 서비스로 전달
-                    phishing_case=random_phishing_case,
-                )
+            (
+                gemini_response,
+                debug_contents,
+            ) = await self.gemini_service.get_chat_response(
+                system_prompt=system_prompt,
+                history=history,
+                user_message=user_db_message.content,
+                phishing_case=phishing_case_to_apply,
             )
+
         except (ConnectionError, HTTPException) as e:
             # Gemini 서비스 자체의 오류를 그대로 클라이언트에 전달
             detail = e.detail if isinstance(e, HTTPException) else str(e)
@@ -161,6 +165,7 @@ class MessageService:
             ai_message=MessageResponse.model_validate(ai_db_message),
             suggested_user_questions=gemini_response.suggested_user_questions,
             is_ready_to_move_on=gemini_response.progress_check.is_ready_to_move_on,
+            debug_request_contents=debug_contents,
         )
 
     def create_system_message(self, conversation_id: int, content: str) -> Message:
