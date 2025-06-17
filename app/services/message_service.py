@@ -191,6 +191,23 @@ class MessageService:
         )
         return system_message
 
+    def create_ai_message(self, conversation_id: int, content: str, token_usage: int = 0) -> Message:
+        """
+        AI 메시지를 생성하고 저장합니다. 시작 메시지 등에 사용됩니다.
+        """
+        message_in = MessageCreate(content=content)
+        ai_message = crud_message.create_message(
+            self.db,
+            message_in=message_in,
+            conversation_id=conversation_id,
+            sender_type=SenderType.AI,
+            gemini_token_usage=token_usage,
+        )
+        # AI 메시지 생성 후에도 last_message_at 업데이트
+        crud_conversation.update_conversation_last_message_at(
+            self.db, conversation_id=conversation_id
+        )
+        return ai_message
 
 # `app/services/__init__.py` 파일에 다음을 추가합니다:
 # from .message_service import MessageService
