@@ -12,3 +12,4 @@ firebase-admin # Firebase Admin SDK (Firebase ID 토큰 검증용)
 google-genai # Google GenAI API 클라이언트
 python-jose[cryptography] # JWT 처리
 boto3 # AWS S3 클라이언트
+scalar-fastapi

@@ -9,7 +9,7 @@ from app.db.session import get_db
 from app.schemas.phishing import PhishingCaseResponse, PhishingCategoryResponse
 from app.services.phishing_service import PhishingService
 
-router = APIRouter()
+router = APIRouter(tags=["피싱 정보 (Phishing Info)"])
 
 
 def get_phishing_service(db: Session = Depends(get_db)) -> PhishingService:

@@ -24,7 +24,7 @@ from app.services.message_service import MessageService
 from app.services.phishing_service import PhishingService
 from app.services.user_service import UserService
 
-router = APIRouter()
+router = APIRouter(tags=["관리자 (Admin)"])
 
 
 def get_conversation_service(db: Session = Depends(get_db)) -> ConversationService:

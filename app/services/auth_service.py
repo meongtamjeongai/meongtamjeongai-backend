@@ -4,6 +4,8 @@ import logging
 from typing import Any, Dict, Optional, Tuple
 
 import firebase_admin
+from fastapi import HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from firebase_admin import auth as firebase_auth
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
@@ -196,3 +198,44 @@ class AuthService:
                 "AuthService (refresh_access_token): Invalid payload in refresh token."
             )
             return None
+
+    # ID/Password 기반 인증 서비스 메소드 추가
+    def authenticate_user_by_password(
+        self, form_data: OAuth2PasswordRequestForm
+    ) -> Token:
+        """
+        사용자명(이메일)과 비밀번호로 사용자를 인증하고 JWT 토큰을 반환합니다.
+        """
+        # crud_user의 authenticate_user 함수를 사용하여 DB에서 사용자 검증
+        user = crud_user.authenticate_user(
+            self.db, email=form_data.username, password=form_data.password
+        )
+
+        # 사용자가 없거나 비밀번호가 틀린 경우
+        if not user:
+            logger.warning(
+                f"AuthService: Password authentication failed for email: {form_data.username}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # 비활성화된 사용자인 경우
+        if not user.is_active:
+            logger.warning(
+                f"AuthService: Inactive user tried to log in: {form_data.username}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
+            )
+
+        # 인증 성공 시, Access Token과 Refresh Token 생성
+        access_token = create_access_token(subject=user.id)
+        refresh_token = create_refresh_token(subject=user.id)
+
+        logger.info(
+            f"AuthService: User {user.id} ({user.email}) authenticated via password. Tokens generated."
+        )
+        return Token(access_token=access_token, refresh_token=refresh_token)

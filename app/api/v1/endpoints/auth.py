@@ -81,6 +81,7 @@ async def refresh_access_token(
     return Token(access_token=new_access_token)
 
 
+# ID/Password 관리자 페이지 로그인 엔드포인트
 @router.post(
     "/token",
     response_model=Token,
@@ -118,3 +119,23 @@ async def login_for_access_token(
         "refresh_token": refresh_token,
         "token_type": "bearer",
     }
+
+
+@router.post(
+    "/login/password",
+    response_model=Token,
+    summary="ID/Password 기반 로그인 (관리자/테스트용)",
+    description="이메일과 비밀번호를 사용하여 로그인하고 서비스 JWT를 발급받습니다.",
+    tags=["인증 (Authentication)"],
+)
+async def login_password_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+):
+    """
+    일반적인 폼 데이터(`username`, `password`)를 받아 사용자를 인증하고 토큰을 발급합니다.
+    - **username**: 사용자의 이메일 주소
+    - **password**: 사용자의 비밀번호
+    """
+    auth_service = AuthService(db)
+    token = auth_service.authenticate_user_by_password(form_data=form_data)
+    return token

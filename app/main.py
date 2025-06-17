@@ -5,11 +5,11 @@ import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from pydantic import BaseModel
-
 import firebase_admin
 from fastapi import Depends, FastAPI, HTTPException
 from firebase_admin import credentials
+from pydantic import BaseModel
+from scalar_fastapi import get_scalar_api_reference
 from sqlalchemy import text
 from sqlalchemy.orm import Session as SQLAlchemySession
 
@@ -99,28 +99,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Application shutdown complete.")
 
 
+servers = [
+    {"url": "https://meong.shop", "description": "운영 서버 (Production)"},
+    {"url": "http://localhost:8000", "description": "로컬 개발 서버 (Development)"},
+]
+
 # FastAPI 애플리케이션 인스턴스 생성
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Flutter와 FastAPI 기반 Gemini AI 채팅 앱 '멍탐정'의 백엔드 API입니다.",
     version="0.1.0",
+    servers=servers,
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
 )
+
 
 # 버전 정보 응답을 위한 Pydantic 모델
 class VersionResponse(BaseModel):
     project_name: str
     version: str
 
+
 @app.get("/version", response_model=VersionResponse, tags=["기본"])
 async def get_version():
     """
     애플리케이션의 이름과 버전 정보를 반환합니다.
     """
-    return VersionResponse(
-        project_name=settings.PROJECT_NAME,
-        version="0.1.0"
-    )
+    return VersionResponse(project_name=settings.PROJECT_NAME, version="0.1.0")
+
 
 # --- 미들웨어 및 예외 핸들러 등록 ---
 app.add_middleware(LoggingMiddleware)
@@ -133,6 +141,16 @@ app.include_router(api_router_v1, prefix=settings.API_V1_STR)
 @app.get("/", tags=["기본"])
 async def read_root():
     return {"message": f"Welcome to {settings.PROJECT_NAME}! 🎉"}
+
+
+@app.get("/scalar", include_in_schema=False)
+async def scalar_html():
+    return get_scalar_api_reference(
+        openapi_url=app.openapi_url,
+        title=app.title,
+        dark_mode=False,
+        servers=servers,
+    )
 
 
 @app.get("/db-status", tags=["데이터베이스"])
@@ -154,4 +172,3 @@ async def get_db_status(db: SQLAlchemySession = Depends(get_db)):
         raise HTTPException(
             status_code=500, detail=f"An unexpected error occurred: {str(e)}"
         )
-

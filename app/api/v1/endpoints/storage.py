@@ -9,7 +9,7 @@ from app.api.deps import get_current_active_superuser, get_current_active_user
 from app.models.user import User as UserModel
 from app.services.s3_service import S3Service
 
-router = APIRouter()
+router = APIRouter(tags=["파일 스토리지 (Storage)"])
 
 
 # 업로드 카테고리를 명확히 정의하는 Enum 클래스

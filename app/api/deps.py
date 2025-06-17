@@ -1,12 +1,13 @@
 # fastapi_backend/app/api/deps.py
 # API 엔드포인트에서 사용될 공통 의존성 함수들
 
-from datetime import datetime, timezone  # datetime, timezone 임포트
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import Depends, HTTPException, status
+# 👇 추가: 쿼리 파라미터를 위한 Query 클래스
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import ExpiredSignatureError, JWTError, jwt  # ExpiredSignatureError 임포트
+from jose import ExpiredSignatureError, JWTError, jwt
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -16,14 +17,45 @@ from app.db.session import get_db
 from app.models.user import User as UserModel
 from app.schemas.token import TokenPayload
 
+# tokenUrl을 새로 만든 ID/Password 로그인 엔드포인트 경로로 변경합니다.
+# 이렇게 하면 Swagger UI의 'Authorize' 버튼을 눌렀을 때 ID/PW 입력 창이 뜨고,
+# 성공 시 자동으로 API 요청 헤더에 토큰이 포함됩니다.
 reusable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.API_V1_STR}/auth/example-token-url-for-swagger"
+    tokenUrl=f"{settings.API_V1_STR}/auth/login/password"
 )
 
 
+# 소스에서 토큰을 가져오는 의존성 함수
+async def get_token_from_various_sources(
+    # 1. 표준 OAuth2 방식 (Authorization: Bearer ... 헤더)
+    token_from_header: Optional[str] = Depends(reusable_oauth2),
+    # 2. 쿼리 파라미터 방식 (?token=...)
+    token_from_query: Optional[str] = Query(
+        None, description="인증을 위한 JWT Access Token"
+    ),
+) -> str:
+    """
+    여러 소스에서 JWT 토큰을 가져옵니다.
+    우선순위: Authorization 헤더 > 'token' 쿼리 파라미터
+    토큰이 없으면 401 에러를 발생시킵니다.
+    """
+    if token_from_header:
+        return token_from_header
+    if token_from_query:
+        return token_from_query
+
+    # 두 방법 모두 토큰이 없는 경우
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 async def get_current_user(
-    db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)
-) -> UserModel:  # 성공 시 항상 UserModel을 반환하도록 타입 힌트 변경
+    db: Session = Depends(get_db),
+    token: str = Depends(get_token_from_various_sources),  # 새로운 방식
+) -> UserModel:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -31,6 +63,7 @@ async def get_current_user(
     )
 
     if not token:
+        # get_token_from_various_sources 에서 이미 처리하지만, 방어적으로 코드 유지
         raise credentials_exception
 
     try:
@@ -75,21 +108,21 @@ async def get_current_user(
         token_data = TokenPayload(sub=str(user_id_from_payload))
         user_id = int(token_data.sub)
 
-    except ExpiredSignatureError:  # 토큰 만료 예외 명시적 처리
+    except ExpiredSignatureError:
         print("deps.get_current_user: ❌ TOKEN EXPIRED. Raising 401.")
         raise credentials_exception
-    except JWTError as e:  # 그 외 JWT 관련 오류
+    except JWTError as e:
         print(f"deps.get_current_user: ❌ JWTError during token decoding: {e}")
         raise credentials_exception
     except (
         ValidationError,
         ValueError,
-    ) as e:  # Pydantic 유효성 검사 또는 타입 변환 오류
+    ) as e:
         print(
             f"deps.get_current_user: ❌ Token payload validation/conversion error: {e}"
         )
         raise credentials_exception
-    except Exception as e:  # 그 외 모든 예상치 못한 예외
+    except Exception as e:
         print(
             f"deps.get_current_user: ❌ Unexpected error during token processing: {e}"
         )
