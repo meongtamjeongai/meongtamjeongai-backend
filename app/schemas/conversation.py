@@ -8,6 +8,7 @@ from pydantic import Field
 
 from app.schemas.base_schema import BaseModel
 from app.schemas.persona import PersonaResponse  # 대화방 목록에 페르소나 정보 포함
+from app.schemas.phishing import PhishingCaseResponse
 from app.schemas.user import UserResponse
 
 
@@ -41,15 +42,13 @@ class ConversationResponse(ConversationBase):
     persona: PersonaResponse  # 대화 상대 페르소나 정보 포함
     created_at: datetime
     last_message_at: datetime
+    applied_phishing_case_id: Optional[int] = None
     # last_message_summary: Optional[ConversationLastMessageSummary] = None # 마지막 메시지 요약 (필요시)
 
     # Pydantic V2
     model_config = {
         "from_attributes": True,
     }
-    # Pydantic V1
-    # class Config:
-    #     orm_mode = True
 
 
 # 👇 관리자용 응답 스키마
@@ -57,6 +56,7 @@ class ConversationAdminResponse(ConversationResponse):
     """관리자용 대화방 응답 스키마. 사용자 정보를 포함합니다."""
 
     user: UserResponse
+    applied_phishing_case: Optional[PhishingCaseResponse] = None
 
 
 # 👇 관리자용 대화방 생성 요청 스키마

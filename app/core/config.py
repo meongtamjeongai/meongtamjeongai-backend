@@ -1,6 +1,7 @@
 # app/core/config.py
 import os
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_ENV = os.getenv("APP_ENV", "dev")
@@ -42,7 +43,8 @@ class Settings(BaseSettings):
     # AWS S3
     S3_BUCKET_NAME: str | None = None
 
-    GEMINI_MODEL_NAME: str = "models/gemini-2.5-flash-preview-05-20"
+    # gemini api
+    GEMINI_MODEL_NAME: str = Field(default="models/gemini-2.5-flash-preview-05-20")
 
 
 settings = Settings()

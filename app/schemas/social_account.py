@@ -16,7 +16,6 @@ class SocialAccountCreate(SocialAccountBase):
     # user_id는 서비스 로직에서 채워지므로 요청 본문에는 불필요
     pass
 
-
 class SocialAccountResponse(SocialAccountBase):
     id: int
     user_id: int
@@ -26,6 +25,3 @@ class SocialAccountResponse(SocialAccountBase):
     model_config = {
         "from_attributes": True,
     }
-    # Pydantic V1
-    # class Config:
-    #     orm_mode = True

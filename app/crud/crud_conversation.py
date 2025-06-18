@@ -121,7 +121,8 @@ def get_all_conversations(
         db.query(Conversation)
         .options(
             joinedload(Conversation.persona),  # 페르소나 정보 Eager 로딩
-            joinedload(Conversation.user),  # 👈 사용자 정보 Eager 로딩 추가
+            joinedload(Conversation.user),  # 사용자 정보 Eager 로딩
+            joinedload(Conversation.applied_phishing_case),
         )
         .order_by(desc(Conversation.last_message_at))
         .offset(skip)

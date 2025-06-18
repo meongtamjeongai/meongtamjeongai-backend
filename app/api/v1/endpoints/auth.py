@@ -87,6 +87,7 @@ async def refresh_access_token(
     response_model=Token,
     summary="이메일/비밀번호 기반 로그인 (관리자용)",
     description="이메일과 비밀번호로 로그인하여 서비스 JWT를 발급받습니다.",
+    tags=["인증 (Authentication)"],
 )
 async def login_for_access_token(
     db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()

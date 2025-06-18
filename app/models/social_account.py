@@ -24,8 +24,8 @@ class SocialProvider(str, enum.Enum):
     FIREBASE_GOOGLE = "firebase_google"
     FIREBASE_ANONYMOUS = "firebase_anonymous"
     GUEST = "guest"
-    NAVER = "naver"  # 추가
-    KAKAO = "kakao"  # 추가
+    NAVER = "naver" 
+    KAKAO = "kakao"
 
 
 class SocialAccount(Base):

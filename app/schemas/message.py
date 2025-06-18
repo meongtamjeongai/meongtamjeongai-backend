@@ -8,7 +8,6 @@ from pydantic import Field
 
 from app.models.message import SenderType  # Enum 임포트
 from app.schemas.base_schema import BaseModel
-from app.schemas.phishing import PhishingCaseResponse
 
 
 class MessageBase(BaseModel):
@@ -28,8 +27,6 @@ class MessageResponse(MessageBase):
     sender_type: SenderType
     gemini_token_usage: Optional[int] = None
     created_at: datetime
-
-    applied_phishing_case: Optional[PhishingCaseResponse] = None
 
     # Pydantic V2
     model_config = {"from_attributes": True}
