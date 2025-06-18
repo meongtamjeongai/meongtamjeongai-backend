@@ -133,12 +133,9 @@ class ConversationService:
 
             # 시스템(또는 AI) 메시지로 시작 메시지를 생성합니다.
             # sender_type을 'ai'로 하면 채팅 UI에서 AI의 말풍선으로 보입니다.
-            message_service.create_system_message(
+            message_service.create_ai_message(
                 conversation_id=new_conversation.id,
                 content=persona.starting_message,
-                # sender_type을 AI로 하고 싶다면 create_system_message 메소드를 수정하거나
-                # 별도의 create_ai_message 같은 메소드를 만들어 사용하면 됩니다.
-                # 여기서는 기존 create_system_message를 활용합니다.
             )
             print(
                 f"✅ Conversation(id:{new_conversation.id})에 시작 메시지를 추가했습니다."
