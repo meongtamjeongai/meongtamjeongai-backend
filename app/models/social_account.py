@@ -1,5 +1,3 @@
-# fastapi_backend/app/models/social_account.py
-
 import enum
 from typing import TYPE_CHECKING
 
@@ -26,6 +24,8 @@ class SocialProvider(str, enum.Enum):
     FIREBASE_GOOGLE = "firebase_google"
     FIREBASE_ANONYMOUS = "firebase_anonymous"
     GUEST = "guest"
+    NAVER = "naver"  # 추가
+    KAKAO = "kakao"  # 추가
 
 
 class SocialAccount(Base):

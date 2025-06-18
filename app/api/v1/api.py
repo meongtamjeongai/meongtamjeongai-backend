@@ -9,6 +9,7 @@ from app.api.v1.endpoints.auth import router as auth_router
 from app.api.v1.endpoints.conversations import router as conversations_router
 from app.api.v1.endpoints.personas import router as personas_router
 from app.api.v1.endpoints.phishing import router as phishing_router
+from app.api.v1.endpoints.social_auth import router as social_auth_router
 from app.api.v1.endpoints.storage import router as storage_router
 from app.api.v1.endpoints.users import router as users_router
 
@@ -21,3 +22,4 @@ api_router_v1.include_router(users_router, prefix="/users")
 api_router_v1.include_router(admin_router, prefix="/admin")
 api_router_v1.include_router(phishing_router, prefix="/phishing")
 api_router_v1.include_router(storage_router, prefix="/storage")
+api_router_v1.include_router(social_auth_router, prefix="/social")
