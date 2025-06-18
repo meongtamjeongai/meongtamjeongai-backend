@@ -3,7 +3,7 @@
 import enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, Text, String, func
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,6 +36,8 @@ class Message(Base):
         SQLAlchemyEnum(SenderType, name="sendertypeenum"), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+
+    image_key: Mapped[str] = mapped_column(String(2048), nullable=True)
 
     gemini_token_usage: Mapped[int] = mapped_column(Integer, nullable=True)
 

@@ -18,6 +18,10 @@ class MessageCreate(MessageBase):
     # conversation_id는 Path 파라미터로 받거나, 서비스 로직에서 설정
     # sender_type은 사용자 메시지 전송 시 'user'로 고정, AI 응답은 서버에서 'ai'로 설정
     # gemini_token_usage는 AI 응답 시 서버에서 설정
+
+    # 이미지가 없는 텍스트 메시지를 위해 Optional로 설정하여 호환성을 유지합니다.
+    image_base64: Optional[str] = Field(None, description="Base64-encoded image data")
+
     pass
 
 
@@ -27,6 +31,7 @@ class MessageResponse(MessageBase):
     sender_type: SenderType
     gemini_token_usage: Optional[int] = None
     created_at: datetime
+    image_key: Optional[str] = None
 
     # Pydantic V2
     model_config = {"from_attributes": True}

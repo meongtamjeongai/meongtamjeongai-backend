@@ -51,6 +51,7 @@ class GeminiService:
         system_prompt: str,
         history: List[MessageModel],
         user_message: str,
+        image_base64: Optional[str] = None,
         phishing_case: Optional[PhishingCase] = None,
         starting_message: Optional[str] = None,
     ) -> Tuple[GeminiChatResponse, List[Dict[str, Any]]]:
