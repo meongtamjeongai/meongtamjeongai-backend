@@ -95,42 +95,51 @@ class AuthService:
                 f"AuthService: No existing social account found for firebase_uid: {firebase_uid}. Creating new user."
             )
 
-            existing_user_by_email = None
-            if email:
-                existing_user_by_email = crud_user.get_user_by_email(
-                    self.db, email=email
-                )
+            try:
+                existing_user_by_email = None
+                if email:
+                    existing_user_by_email = crud_user.get_user_by_email(
+                        self.db, email=email
+                    )
 
-            if existing_user_by_email:
-                user_to_link = existing_user_by_email
-                logger.info(
-                    f"AuthService: Linking new social account to existing user with email: {email}"
-                )
-            else:
-                user_create_data = {
-                    "email": email,
-                    "username": decoded_token.get("name")
-                    if provider == SocialProvider.FIREBASE_GOOGLE
-                    else f"guest_{firebase_uid[:8]}",
-                    "is_active": True,
-                    "is_guest": provider == SocialProvider.FIREBASE_ANONYMOUS,
-                }
-                user_in = UserCreate(**user_create_data)
-                user_to_link = crud_user.create_user(self.db, user_in=user_in)
-                logger.info(
-                    f"AuthService: Created new user. UID: {user_to_link.id}, Email: {user_to_link.email}"
-                )
+                if existing_user_by_email:
+                    user_to_link = existing_user_by_email
+                    logger.info(
+                        f"AuthService: Linking new social account to existing user with email: {email}"
+                    )
+                else:
+                    user_create_data = {
+                        "email": email,
+                        "username": decoded_token.get("name")
+                        if provider == SocialProvider.FIREBASE_GOOGLE
+                        else f"guest_{firebase_uid[:8]}",
+                        "is_active": True,
+                        "is_guest": provider == SocialProvider.FIREBASE_ANONYMOUS,
+                    }
+                    user_in = UserCreate(**user_create_data)
+                    user_to_link = crud_user.create_user(self.db, user_in=user_in)
+                    logger.info(
+                        f"AuthService: Created new user. UID: {user_to_link.id}, Email: {user_to_link.email}"
+                    )
 
-            social_account_in = SocialAccountCreate(
-                provider=provider, provider_user_id=firebase_uid
-            )
-            crud_social_account.create_social_account(
-                self.db, social_account_in=social_account_in, user_id=user_to_link.id
-            )
-            logger.info(
-                f"AuthService: Created new social account for user_id: {user_to_link.id}"
-            )
-            return user_to_link
+                social_account_in = SocialAccountCreate(
+                    provider=provider, provider_user_id=firebase_uid
+                )
+                crud_social_account.create_social_account(
+                    self.db, social_account_in=social_account_in, user_id=user_to_link.id
+                )
+                self.db.commit()
+                logger.info(
+                    f"AuthService: Created new social account for user_id: {user_to_link.id}"
+                )
+                self.db.refresh(user_to_link)
+                return user_to_link
+            except Exception as e:
+                # 💡 오류 발생 시 롤백하여 데이터 불일치를 방지합니다.
+                logger.error(f"Error during user/social account creation: {e}", exc_info=True)
+                self.db.rollback()
+                # None을 반환하거나, 혹은 여기서 바로 HTTPException을 발생시킬 수도 있습니다.
+                return None
 
     async def authenticate_with_firebase_id_token(
         self, id_token: str

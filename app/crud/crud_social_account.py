@@ -37,21 +37,17 @@ def get_social_accounts_by_user_id(db: Session, user_id: int) -> List[SocialAcco
     """특정 사용자의 모든 소셜 계정을 조회합니다."""
     return db.query(SocialAccount).filter(SocialAccount.user_id == user_id).all()
 
-
 def create_social_account(
     db: Session, *, social_account_in: SocialAccountCreate, user_id: int
 ) -> SocialAccount:
     """새로운 소셜 계정을 생성하고 사용자와 연결합니다."""
     db_social_account = SocialAccount(
-        **social_account_in.model_dump(),  # Pydantic v2
-        # **social_account_in.dict(), # Pydantic v1
+        **social_account_in.model_dump(),
         user_id=user_id,
     )
     db.add(db_social_account)
-    db.commit()
-    db.refresh(db_social_account)
+    # 💡 [수정] commit과 refresh를 제거합니다.
     return db_social_account
-
 
 def delete_social_account(
     db: Session, *, social_account_id: int

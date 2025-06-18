@@ -38,13 +38,14 @@ def create_user(db: Session, *, user_in: UserCreate) -> User:
 
     db_user = User(**db_user_data)
     db.add(db_user)
-    db.commit()
+    
+    # commit을 제거하고, user.id를 얻기 위해 flush를 호출합니다.
+    db.flush()
+    db.refresh(db_user)
 
     db_user_point = UserPoint(user_id=db_user.id, points=0) 
     db.add(db_user_point)
-    db.commit()
     
-    db.refresh(db_user)
     return db_user
 
 def update_user(db: Session, *, db_user: User, user_in: Union[UserUpdate, Dict[str, Any]]) -> User:
