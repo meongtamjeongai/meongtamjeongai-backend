@@ -8,12 +8,19 @@ from sqlalchemy.orm import Session
 from app.crud import crud_phishing
 from app.models.phishing_case import PhishingCase
 from app.models.phishing_category import PhishingCategory
-from app.schemas.phishing import PhishingCaseCreate, PhishingCaseUpdate
+from app.schemas.phishing import (
+    PhishingCaseCreate,
+    PhishingCaseUpdate,
+    PhishingImageAnalysisRequest,
+    PhishingImageAnalysisResponse,
+)
+from app.services.gemini_service import GeminiService
 
 
 class PhishingService:
     def __init__(self, db: Session):
         self.db = db
+        self.gemini_service = GeminiService()
 
     def get_all_categories(self) -> List[PhishingCategory]:
         """모든 피싱 유형 목록을 조회합니다."""
@@ -51,3 +58,14 @@ class PhishingService:
         db_case = self.get_case_by_id(case_id)  # get_case_by_id가 404 처리를 해줌
         crud_phishing.delete_phishing_case(self.db, case_id=case_id)
         return db_case
+
+    async def analyze_phishing_image(
+        self, request: PhishingImageAnalysisRequest
+    ) -> PhishingImageAnalysisResponse:
+        """
+        Gemini 서비스를 호출하여 이미지의 피싱 위험도를 분석합니다.
+        """
+        response = await self.gemini_service.analyze_image_for_phishing(
+            image_base64=request.image_base64
+        )
+        return response

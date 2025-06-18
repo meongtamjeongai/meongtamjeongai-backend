@@ -1,4 +1,4 @@
-# app/schemas/phishing.py (수정)
+# app/schemas/phishing.py
 
 from datetime import date
 from typing import Optional
@@ -48,3 +48,22 @@ class PhishingCaseResponse(PhishingCaseBase):
     reference_url: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+# --- 이미지 분석 요청 스키마 ---
+class PhishingImageAnalysisRequest(BaseModel):
+    image_base64: str = Field(..., description="분석할 이미지의 Base64 인코딩된 데이터")
+
+
+# --- 이미지 분석 응답 스키마 ---
+class PhishingImageAnalysisResponse(BaseModel):
+    phishing_score: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="이미지가 피싱일 확률 점수 (0-100)",
+    )
+    reason: str = Field(
+        ...,
+        description="피싱 점수를 그렇게 판단한 상세한 이유",
+    )

@@ -27,8 +27,7 @@ class UploadCategory(str, enum.Enum):
 class PresignedUrlRequest(BaseModel):
     filename: str = Field(
         ...,
-        description="업로드할 파일의 원래 이름 (예: my_avatar.png)",
-        examples=["my_profile.jpg"],
+        description="업로드할 파일의 원래 이름 (예: my_avatar.png)"
     )
 
 

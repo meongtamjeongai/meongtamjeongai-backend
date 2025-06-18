@@ -1,23 +1,21 @@
 # fastapi_backend/app/services/message_service.py
 # 메시지 관련 비즈니스 로직을 처리하는 서비스
 
-from typing import List
 import base64
 import uuid
+from typing import List
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.crud import crud_conversation, crud_message, crud_phishing
+from app.crud import crud_conversation, crud_message
 from app.models.message import Message, SenderType
 from app.models.user import User
-
 from app.schemas.message import (
     ChatMessageResponse,
     MessageCreate,
     MessageResponse,
 )
-
 from app.services.gemini_service import GeminiService
 from app.services.s3_service import S3Service
 
@@ -105,14 +103,6 @@ class MessageService:
         system_prompt = persona.system_prompt
         starting_message = persona.starting_message
         phishing_case_to_apply = db_conversation.applied_phishing_case
-        if phishing_case_to_apply is None:
-            random_case = crud_phishing.get_random_phishing_case(self.db)
-            if random_case:
-                db_conversation.applied_phishing_case_id = random_case.id
-                self.db.add(db_conversation)
-                self.db.commit()
-                self.db.refresh(db_conversation)
-                phishing_case_to_apply = db_conversation.applied_phishing_case
 
         # --- ✅ 3. Gemini 서비스 호출하여 AI 응답 생성 (DB 저장 전) ---
         try:
@@ -200,7 +190,9 @@ class MessageService:
         )
         return system_message
 
-    def create_ai_message(self, conversation_id: int, content: str, token_usage: int = 0) -> Message:
+    def create_ai_message(
+        self, conversation_id: int, content: str, token_usage: int = 0
+    ) -> Message:
         """
         AI 메시지를 생성하고 저장합니다. 시작 메시지 등에 사용됩니다.
         """
@@ -217,6 +209,7 @@ class MessageService:
             self.db, conversation_id=conversation_id
         )
         return ai_message
+
 
 # `app/services/__init__.py` 파일에 다음을 추가합니다:
 # from .message_service import MessageService

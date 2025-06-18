@@ -6,12 +6,13 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.crud import crud_conversation, crud_persona, crud_user
+from app.crud import crud_conversation, crud_persona, crud_phishing, crud_user
 from app.models.conversation import Conversation
 from app.models.user import User
 from app.schemas.conversation import ConversationCreate, ConversationCreateAdmin
 from app.services.message_service import MessageService
 from app.services.s3_service import S3Service
+
 
 class ConversationService:
     def __init__(self, db: Session):
@@ -23,36 +24,30 @@ class ConversationService:
     def start_new_conversation_admin(
         self, conversation_in: ConversationCreateAdmin
     ) -> Conversation:
-        """[Admin] 관리자가 특정 사용자와 페르소나를 지정하여 새 대화방을 시작합니다."""
-        # 1. 대상 사용자가 존재하는지 확인
-        user = crud_user.get_user(self.db, user_id=conversation_in.user_id)
-        if not user:
+        """
+        [Admin] 관리자가 특정 사용자와 페르소나를 지정하여 새 대화방을 시작합니다.
+        내부적으로 일반 사용자용 대화방 생성 함수를 호출하여 로직을 재사용합니다.
+        """
+        # 1. 대상 사용자가 존재하는지 확인합니다.
+        target_user = crud_user.get_user(self.db, user_id=conversation_in.user_id)
+        if not target_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"User with id {conversation_in.user_id} not found.",
             )
 
-        # 2. 대상 페르소나가 존재하는지 확인
-        persona = crud_persona.get_persona(
-            self.db, persona_id=conversation_in.persona_id
-        )
-        if not persona:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Persona with id {conversation_in.persona_id} not found.",
-            )
-
-        # 3. ConversationCreate 스키마 형태로 변환하여 기존 생성 함수 호출
-        #    (이렇게 하면 코드 재사용성이 높아집니다)
+        # 2. ConversationCreate 스키마 형태로 변환합니다.
+        #    이 스키마는 start_new_conversation 함수가 요구하는 입력 형식입니다.
         create_data = ConversationCreate(
             persona_id=conversation_in.persona_id, title=conversation_in.title
         )
 
-        new_conversation = crud_conversation.create_conversation(
-            self.db, conversation_in=create_data, user_id=conversation_in.user_id
+        # 3. 일반 사용자용 대화방 생성 함수를 호출합니다.
+        #    이때, current_user 인자에는 관리자가 지정한 '대상 사용자'를 전달합니다.
+        #    이렇게 하면 피싱 사례 할당, 시작 메시지 추가 등의 모든 로직이 재사용됩니다.
+        return self.start_new_conversation(
+            conversation_in=create_data, current_user=target_user
         )
-
-        return new_conversation
 
     # 👇 관리자용 전체 대화방 조회 서비스 추가
     def get_all_conversations_admin(
@@ -68,13 +63,15 @@ class ConversationService:
         삭제 전, 해당 대화방에 속한 모든 메시지의 S3 이미지를 함께 삭제합니다.
         """
         # 1. 삭제할 대화방이 존재하는지 확인합니다.
-        conversation = crud_conversation.get_conversation(self.db, conversation_id=conversation_id)
+        conversation = crud_conversation.get_conversation(
+            self.db, conversation_id=conversation_id
+        )
         if not conversation:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversation not found",
             )
-        
+
         # 2. 대화방에 속한 모든 메시지를 가져옵니다.
         # 페이지네이션 없이 모든 메시지를 가져오기 위해 limit=None을 사용합니다.
         messages_to_delete = self.message_service.get_messages_for_conversation_admin(
@@ -97,7 +94,7 @@ class ConversationService:
         deleted_conversation = crud_conversation.delete_conversation_by_id(
             self.db, conversation_id=conversation_id
         )
-        
+
         return deleted_conversation
 
     def get_conversation_by_id_for_user(
@@ -153,6 +150,16 @@ class ConversationService:
         new_conversation = crud_conversation.create_conversation(
             self.db, conversation_in=conversation_in, user_id=current_user.id
         )
+
+        random_case = crud_phishing.get_random_phishing_case(self.db)
+        if random_case:
+            new_conversation.applied_phishing_case_id = random_case.id
+            self.db.add(new_conversation)
+            self.db.commit()
+            self.db.refresh(new_conversation)
+            print(
+                f"✅ 대화방(ID:{new_conversation.id}) 생성 시 피싱 사례(ID:{random_case.id}) 할당 완료"
+            )
 
         # 3. 페르소나에 시작 메시지가 정의되어 있으면, 대화방의 첫 메시지로 추가
         if persona.starting_message:

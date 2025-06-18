@@ -39,3 +39,4 @@ def get_db() -> SQLAlchemySession: # 제너레이터 대신 직접 세션 반환
     finally:
         db.close()
         # print("Database session closed.") # 디버깅용 로그
+        

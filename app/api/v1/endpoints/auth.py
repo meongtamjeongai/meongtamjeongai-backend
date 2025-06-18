@@ -85,8 +85,8 @@ async def refresh_access_token(
 @router.post(
     "/token",
     response_model=Token,
-    summary="이메일/비밀번호 기반 로그인 (관리자용)",
-    description="이메일과 비밀번호로 로그인하여 서비스 JWT를 발급받습니다.",
+    summary="[관리자 앱 전용] 이메일/비밀번호 로그인",
+    description="Streamlit으로 만들어진 관리자 페이지에서 사용하는 로그인 전용 엔드포인트입니다. 슈퍼유저 권한을 확인합니다.",
     tags=["인증 (Authentication)"],
 )
 async def login_for_access_token(
@@ -125,8 +125,8 @@ async def login_for_access_token(
 @router.post(
     "/login/password",
     response_model=Token,
-    summary="ID/Password 기반 로그인 (관리자/테스트용)",
-    description="이메일과 비밀번호를 사용하여 로그인하고 서비스 JWT를 발급받습니다.",
+    summary="[API 문서 테스트용] ID/Password 로그인",
+    description="API 문서(Swagger UI)의 'Authorize' 버튼과 연동된 로그인 엔드포인트입니다. 개발 및 테스트 목적으로 사용됩니다.",
     tags=["인증 (Authentication)"],
 )
 async def login_password_access_token(
