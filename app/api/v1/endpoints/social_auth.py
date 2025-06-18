@@ -95,7 +95,7 @@ def naver_login(token_in: SocialTokenRequest, db: Session = Depends(get_db)):
                     "is_active": True,
                 }
 
-                user_in_schema = UserCreate(user_in_data)
+                user_in_schema = UserCreate(**user_in_data)
 
                 user = crud_user.create_user(db, user_in=user_in_schema)
 
@@ -208,7 +208,7 @@ def kakao_login(token_in: SocialTokenRequest, db: Session = Depends(get_db)):
                     "username": nickname or f"kakao_{kakao_id[:8]}",
                     "is_active": True,
                 }
-                user_in_schema = UserCreate(user_in_data)
+                user_in_schema = UserCreate(**user_in_data)
 
                 user = crud_user.create_user(db, user_in=user_in_schema)
 
