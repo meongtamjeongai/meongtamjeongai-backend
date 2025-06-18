@@ -74,6 +74,21 @@ class S3Service:
                 detail=f"Could not generate file URL due to a server-side S3 error: {error_code}",
             )
 
+    # --- 서버에서 직접 바이트 데이터를 업로드하는 함수 ---
+    def upload_bytes_to_s3(self, data_bytes: bytes, object_key: str, content_type: str):
+        if not self.bucket_name:
+            raise HTTPException(...) # 생략
+        try:
+            self.s3_client.put_object(
+                Bucket=self.bucket_name,
+                Key=object_key,
+                Body=data_bytes,
+                ContentType=content_type,
+            )
+        except ClientError as e:
+            # 에러 처리 로직
+            raise HTTPException(status_code=500, detail=f"S3 upload failed: {e}")
+        
     def delete_object(self, object_key: str) -> bool:
         """
         S3 버킷에서 특정 객체를 삭제합니다.

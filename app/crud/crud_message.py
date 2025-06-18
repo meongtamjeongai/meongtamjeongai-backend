@@ -46,7 +46,6 @@ def get_messages_by_conversation(
 
     return query.all()
 
-
 def create_message(
     db: Session,
     *,
@@ -54,25 +53,16 @@ def create_message(
     conversation_id: int,
     sender_type: SenderType,
     gemini_token_usage: Optional[int] = None,
+    image_key: Optional[str] = None,
 ) -> Message:
-    """
-    새로운 메시지를 생성하고 특정 대화방에 추가합니다.
-    """
     db_message = Message(
         conversation_id=conversation_id,
         sender_type=sender_type,
-        content=message_in.content,  # MessageCreate 스키마에는 content만 있음
+        content=message_in.content,
         gemini_token_usage=gemini_token_usage,
+        image_key=image_key,
     )
     db.add(db_message)
     db.commit()
     db.refresh(db_message)
     return db_message
-
-
-# 메시지 수정 및 삭제는 일반적인 채팅 앱에서는 흔하지 않거나, 정책에 따라 다릅니다.
-# def update_message(...) -> ...
-# def delete_message(...) -> ...
-
-# `app/crud/__init__.py` 파일에 다음을 추가합니다:
-# from . import crud_message

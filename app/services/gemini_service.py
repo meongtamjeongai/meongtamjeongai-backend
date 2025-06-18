@@ -1,14 +1,17 @@
 # app/services/gemini_service.py
 
+import base64
 import json
 import logging
 import os
+from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
 from google import genai
 from google.api_core import exceptions as google_api_exceptions
 from google.genai import types
+from PIL import Image
 
 from app.core.config import settings
 from app.models.message import Message as MessageModel
@@ -28,7 +31,12 @@ class GeminiService:
         api_key = os.getenv("GEMINI_API_KEY")
         if api_key:
             try:
-                self.client = genai.Client(api_key=api_key)
+                # 💡 [수정] genai.configure()를 사용하여 API 키를 설정하는 것이 권장 방식입니다.
+                genai.configure(api_key=api_key)
+                # 💡 [수정] GenerativeModel을 직접 사용하는 것이 더 직관적일 수 있습니다.
+                self.model = genai.GenerativeModel(
+                    model_name=settings.GEMINI_MODEL_NAME
+                )
                 logger.info(
                     "✅ GeminiService: Google Gen AI Client initialized successfully."
                 )
@@ -37,14 +45,16 @@ class GeminiService:
                     f"❌ GeminiService: Failed to initialize Google Gen AI Client: {e}",
                     exc_info=True,
                 )
+                self.model = None
         else:
             logger.warning(
                 "⚠️ GeminiService: GEMINI_API_KEY environment variable not found."
             )
+            self.model = None
 
     def is_available(self) -> bool:
         """서비스가 사용 가능한지 (클라이언트가 초기화되었는지) 확인합니다."""
-        return self.client is not None
+        return self.model is not None
 
     async def get_chat_response(
         self,
@@ -64,10 +74,8 @@ class GeminiService:
             )
 
         try:
-            # ⭐️ 피싱 시나리오를 바탕으로 최종 시스템 프롬프트를 구성
             final_system_prompt = system_prompt
             if phishing_case:
-                # PhishingCase 객체에서 필요한 정보를 추출하여 프롬프트에 주입
                 phishing_info = f"""
 ---
 [오늘의 피싱 학습 시나리오]
@@ -80,22 +88,14 @@ class GeminiService:
 """
                 final_system_prompt += phishing_info
 
-            # 1. 대화 기록을 genai.types.Content 객체 리스트로 재구성
             reconstructed_history = []
             for msg in history:
                 role = "user" if msg.sender_type == SenderType.USER else "model"
-                reconstructed_history.append(
-                    types.Content(
-                        role=role, parts=[types.Part.from_text(text=msg.content)]
-                    )
-                )
+                msg_parts = [types.Part.from_text(text=msg.content)]
+                reconstructed_history.append(types.Content(role=role, parts=msg_parts))
 
-            # 시스템 프롬프트는 항상 기본으로 포함
             contents_for_generation = []
-
-            # ✨ 시작 메시지가 있고, 실제 DB 대화 기록이 비어있을 때만 주입
             if starting_message and not history:
-                # AI의 첫 발언으로 취급 (role='model')
                 contents_for_generation.append(
                     types.Content(
                         role="model",
@@ -103,15 +103,31 @@ class GeminiService:
                     )
                 )
 
-            # 실제 대화 기록과 현재 사용자 메시지를 추가
             contents_for_generation.extend(reconstructed_history)
-            contents_for_generation.append(
-                types.Content(
-                    role="user", parts=[types.Part.from_text(text=user_message)]
-                )
-            )
 
-            # 토큰 계산을 위한 contents는 시스템 프롬프트 + 생성용 contents로 구성
+            user_parts = [types.Part.from_text(text=user_message)]
+            if image_base64:
+                try:
+                    image_data = base64.b64decode(image_base64)
+                    img = Image.open(BytesIO(image_data))
+                    mime_type = Image.MIME.get(img.format)
+                    if not mime_type:
+                        raise ValueError("Could not determine image MIME type.")
+
+                    user_parts.append(
+                        types.Part(
+                            inline_data=types.Blob(mime_type=mime_type, data=image_data)
+                        )
+                    )
+                    logger.info(
+                        f"✅ 이미지 데이터를 성공적으로 파싱하여 Gemini 요청에 포함했습니다. (MIME: {mime_type})"
+                    )
+                except Exception as e:
+                    logger.error(f"🔥 Base64 이미지 데이터 처리 중 오류 발생: {e}")
+                    pass
+
+            contents_for_generation.append(types.Content(role="user", parts=user_parts))
+
             contents_for_counting = [
                 types.Content(
                     role="user", parts=[types.Part.from_text(text=final_system_prompt)]
@@ -126,13 +142,12 @@ class GeminiService:
                 ),
             ] + contents_for_generation
 
-            token_count_response = await self.client.aio.models.count_tokens(
-                model=settings.GEMINI_MODEL_NAME,
+            token_count_response = await genai.caching.get_async_client().count_tokens(
+                model=self.model.model_name,
                 contents=contents_for_counting,
             )
             total_tokens = token_count_response.total_tokens
 
-            # 3. JSON 응답 스키마 준비
             response_schema = GeminiChatResponse.model_json_schema()
             if (
                 "properties" in response_schema
@@ -145,29 +160,32 @@ class GeminiService:
                 ):
                     response_schema["required"].remove("token_usage")
 
-            # 4. ⭐️ [변경] generate_content에 전달할 config 객체를 생성
-            generation_config = types.GenerateContentConfig(
-                system_instruction=final_system_prompt,  # ⭐️ 수정된 최종 프롬프트 사용
+            generation_config = types.GenerationConfig(
                 response_mime_type="application/json",
                 response_schema=response_schema,
                 temperature=0.7,
             )
 
-            # 5. generate_content에 전달할 contents는 대화 기록과 새 메시지만 포함
-            contents_for_generation = reconstructed_history + [
-                types.Content(
-                    role="user", parts=[types.Part.from_text(text=user_message)]
-                )
-            ]
+            # --- ✅ [디버깅 로그 추가] ---
+            logger.info("--- 🚀 최종 Gemini 요청 Contents ---")
+            for content in contents_for_generation:
+                part_details = []
+                for part in content.parts:
+                    if hasattr(part, "text"):
+                        part_details.append(f"Text(len={len(part.text)})")
+                    elif hasattr(part, "inline_data"):
+                        part_details.append(
+                            f"Image(mime={part.inline_data.mime_type}, len={len(part.inline_data.data)})"
+                        )
+                logger.info(f"Role: {content.role}, Parts: {part_details}")
+            logger.info("------------------------------------")
 
-            # 6. ⭐️ [변경] 'config' 파라미터에 위에서 생성한 객체를 전달
-            response = await self.client.aio.models.generate_content(
-                model=settings.GEMINI_MODEL_NAME,
+            response = await self.model.generate_content_async(
                 contents=contents_for_generation,
-                config=generation_config,
+                generation_config=generation_config,
+                system_instruction=final_system_prompt,
             )
 
-            # 7. 결과 파싱 및 반환
             json_response = json.loads(response.text)
             json_response["token_usage"] = total_tokens
 

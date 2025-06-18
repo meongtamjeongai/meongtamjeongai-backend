@@ -11,11 +11,13 @@ from app.models.conversation import Conversation
 from app.models.user import User
 from app.schemas.conversation import ConversationCreate, ConversationCreateAdmin
 from app.services.message_service import MessageService
-
+from app.services.s3_service import S3Service
 
 class ConversationService:
     def __init__(self, db: Session):
         self.db = db
+        self.s3_service = S3Service()
+        self.message_service = MessageService(db)
 
     # 👇 관리자용 대화방 생성 서비스 함수
     def start_new_conversation_admin(
@@ -59,18 +61,44 @@ class ConversationService:
         """[Admin] 시스템의 모든 대화방 목록을 조회합니다."""
         return crud_conversation.get_all_conversations(self.db, skip=skip, limit=limit)
 
-    # 👇 관리자용 대화방 삭제 서비스 추가
+    # 👇 관리자용 대화방 삭제 서비스 수정
     def delete_conversation_admin(self, conversation_id: int) -> Optional[Conversation]:
-        """[Admin] 특정 대화방을 ID로 삭제합니다."""
-        conversation_to_delete = crud_conversation.delete_conversation_by_id(
-            self.db, conversation_id=conversation_id
-        )
-        if not conversation_to_delete:
+        """
+        [Admin] 특정 대화방을 ID로 삭제합니다.
+        삭제 전, 해당 대화방에 속한 모든 메시지의 S3 이미지를 함께 삭제합니다.
+        """
+        # 1. 삭제할 대화방이 존재하는지 확인합니다.
+        conversation = crud_conversation.get_conversation(self.db, conversation_id=conversation_id)
+        if not conversation:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversation not found",
             )
-        return conversation_to_delete
+        
+        # 2. 대화방에 속한 모든 메시지를 가져옵니다.
+        # 페이지네이션 없이 모든 메시지를 가져오기 위해 limit=None을 사용합니다.
+        messages_to_delete = self.message_service.get_messages_for_conversation_admin(
+            conversation_id=conversation_id, limit=None
+        )
+
+        # 3. 각 메시지를 순회하며 연결된 S3 이미지가 있으면 삭제합니다.
+        for message in messages_to_delete:
+            if message.image_key:
+                try:
+                    print(f"S3 이미지 삭제 시도: {message.image_key}")
+                    self.s3_service.delete_object(object_key=message.image_key)
+                except Exception as e:
+                    # S3 삭제 실패 시, 에러를 로깅하고 계속 진행할지 또는 전체 작업을 중단할지 결정해야 합니다.
+                    # 여기서는 에러를 로깅하고 계속 진행하여 DB 데이터는 삭제되도록 합니다.
+                    print(f"S3 이미지 삭제 실패 (Key: {message.image_key}): {e}")
+
+        # 4. 모든 S3 리소스 정리 후, DB에서 대화방을 삭제합니다.
+        # Conversation 모델의 cascade 설정에 의해 하위 메시지들도 함께 삭제됩니다.
+        deleted_conversation = crud_conversation.delete_conversation_by_id(
+            self.db, conversation_id=conversation_id
+        )
+        
+        return deleted_conversation
 
     def get_conversation_by_id_for_user(
         self, conversation_id: int, current_user: User

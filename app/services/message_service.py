@@ -2,6 +2,8 @@
 # 메시지 관련 비즈니스 로직을 처리하는 서비스
 
 from typing import List
+import base64
+import uuid
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -9,18 +11,22 @@ from sqlalchemy.orm import Session
 from app.crud import crud_conversation, crud_message, crud_phishing
 from app.models.message import Message, SenderType
 from app.models.user import User
-from app.schemas.message import (  # ⭐️ ChatMessageResponse 임포트
+
+from app.schemas.message import (
     ChatMessageResponse,
     MessageCreate,
     MessageResponse,
 )
+
 from app.services.gemini_service import GeminiService
+from app.services.s3_service import S3Service
 
 
 class MessageService:
     def __init__(self, db: Session):
         self.db = db
         self.gemini_service = GeminiService()
+        self.s3_service = S3Service()
 
     # 👇 관리자용 메시지 조회 서비스 추가
     def get_messages_for_conversation_admin(
@@ -92,47 +98,23 @@ class MessageService:
             )
 
         # 2. AI 응답 생성을 위한 준비
-        # 전체 대화 기록을 시간순으로 가져오기
         history = crud_message.get_messages_by_conversation(
             self.db, conversation_id=conversation_id, limit=None, sort_asc=True
         )
-
-        # 3. 사용자 메시지를 DB에 저장
-        user_db_message = crud_message.create_message(
-            self.db,
-            message_in=message_in,
-            conversation_id=conversation_id,
-            sender_type=SenderType.USER,
-        )
-
-        # 대화방의 마지막 메시지 시간 업데이트
-        crud_conversation.update_conversation_last_message_at(self.db, conversation_id)
-
-        # 페르소나 객체에서 필요한 모든 정보를 가져옵니다.
         persona = db_conversation.persona
         system_prompt = persona.system_prompt
         starting_message = persona.starting_message
-
-        # 대화에 적용된 피싱 시나리오를 확인하고, 없으면 새로 할당합니다.
         phishing_case_to_apply = db_conversation.applied_phishing_case
-
-        # 아직 적용된 시나리오가 없다면 (대화의 첫 시작)
         if phishing_case_to_apply is None:
             random_case = crud_phishing.get_random_phishing_case(self.db)
             if random_case:
-                # 대화 객체에 피싱 사례 ID를 할당하고 DB에 저장
                 db_conversation.applied_phishing_case_id = random_case.id
                 self.db.add(db_conversation)
                 self.db.commit()
                 self.db.refresh(db_conversation)
-
-                # 이번 호출에서 사용할 시나리오로 설정
                 phishing_case_to_apply = db_conversation.applied_phishing_case
-                print(
-                    f"✅ [AI 시나리오] 대화(ID:{conversation_id})에 피싱 사례(ID:{random_case.id}) 신규 할당"
-                )
 
-        # 4. Gemini 서비스를 호출하여 AI 응답 생성
+        # --- ✅ 3. Gemini 서비스 호출하여 AI 응답 생성 (DB 저장 전) ---
         try:
             (
                 gemini_response,
@@ -140,17 +122,45 @@ class MessageService:
             ) = await self.gemini_service.get_chat_response(
                 system_prompt=system_prompt,
                 history=history,
-                user_message=user_db_message.content,
+                user_message=message_in.content,
+                image_base64=message_in.image_base64,  # 이미지 데이터 전달
                 phishing_case=phishing_case_to_apply,
                 starting_message=starting_message,
             )
-
         except (ConnectionError, HTTPException) as e:
-            # Gemini 서비스 자체의 오류를 그대로 클라이언트에 전달
             detail = e.detail if isinstance(e, HTTPException) else str(e)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
             )
+
+        # --- ✅ 4. AI 응답 성공 후, 이미지 S3 업로드 및 사용자 메시지 DB 저장 ---
+        s3_image_key = None
+        if message_in.image_base64:
+            try:
+                image_data = base64.b64decode(message_in.image_base64)
+                # 파일명은 UUID로 생성하여 고유성 보장
+                filename = f"messages/{uuid.uuid4()}.png"
+                self.s3_service.upload_bytes_to_s3(
+                    data_bytes=image_data, object_key=filename, content_type="image/png"
+                )
+                s3_image_key = filename
+            except Exception as e:
+                # S3 업로드 실패 시, 로깅하고 이미지 없이 메시지만 저장
+                print(f"S3 이미지 업로드 실패: {e}")
+                # 이 경우 s3_image_key는 None으로 유지됨
+
+        # DB에 사용자 메시지 저장 (s3_image_key 포함)
+        user_db_message = crud_message.create_message(
+            self.db,
+            message_in=message_in,
+            conversation_id=conversation_id,
+            sender_type=SenderType.USER,
+            # --- ✅ image_key 전달 ---
+            image_key=s3_image_key,
+        )
+
+        # 대화방 마지막 메시지 시간 업데이트
+        crud_conversation.update_conversation_last_message_at(self.db, conversation_id)
 
         # 5. AI의 응답을 DB에 저장
         ai_message_in = MessageCreate(content=gemini_response.response)
@@ -162,7 +172,6 @@ class MessageService:
             gemini_token_usage=gemini_response.token_usage,
         )
 
-        # 대화방의 마지막 메시지 시간 다시 업데이트
         crud_conversation.update_conversation_last_message_at(self.db, conversation_id)
 
         # 6. 최종 응답 객체를 생성하여 반환

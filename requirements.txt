@@ -13,3 +13,4 @@ google-genai # Google GenAI API 클라이언트
 python-jose[cryptography] # JWT 처리
 boto3 # AWS S3 클라이언트
 scalar-fastapi
+Pillow # 이미지 처리
