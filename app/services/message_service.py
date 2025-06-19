@@ -85,10 +85,23 @@ class MessageService:
     async def send_new_message(
         self, conversation_id: int, message_in: MessageCreate, current_user: User
     ) -> ChatMessageResponse:
-        # 1. 대화방 존재 및 사용자 접근 권한 확인
-        db_conversation = crud_conversation.get_conversation(
-            self.db, conversation_id=conversation_id, user_id=current_user.id
-        )
+        """
+        대화방에 새 메시지를 전송하고 AI 응답을 받습니다.
+        사용자가 관리자일 경우, 모든 대화방에 메시지를 보낼 수 있습니다.
+        """
+        # 1. 관리자인 경우와 일반 사용자인 경우를 분리하여 대화방을 조회
+        if current_user.is_superuser:
+            # 관리자일 경우, user_id 검사 없이 conversation_id로만 조회
+            db_conversation = crud_conversation.get_conversation(
+                self.db, conversation_id=conversation_id
+            )
+        else:
+            # 일반 사용자일 경우, user_id까지 검사하여 본인 소유인지 확인
+            db_conversation = crud_conversation.get_conversation(
+                self.db, conversation_id=conversation_id, user_id=current_user.id
+            )
+
+        # 공통 로직: 위에서 대화방을 찾지 못하면 404 발생
         if not db_conversation:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -104,7 +117,7 @@ class MessageService:
         starting_message = persona.starting_message
         phishing_case_to_apply = db_conversation.applied_phishing_case
 
-        # --- ✅ 3. Gemini 서비스 호출하여 AI 응답 생성 (DB 저장 전) ---
+        # 3. Gemini 서비스 호출하여 AI 응답 생성 (DB 저장 전)
         try:
             (
                 gemini_response,
