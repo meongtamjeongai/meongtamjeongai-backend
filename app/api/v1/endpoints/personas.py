@@ -14,7 +14,7 @@ from fastapi import (  # Path 임포트 추가
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_current_user
-from app.db.session import get_db
+from app.db.session import get_async_db
 from app.models.user import User as UserModel
 from app.schemas.persona import PersonaCreate, PersonaResponse, PersonaUpdate
 from app.services.persona_service import PersonaService
@@ -22,7 +22,7 @@ from app.services.persona_service import PersonaService
 router = APIRouter()
 
 
-def get_persona_service(db: Session = Depends(get_db)) -> PersonaService:
+async def get_persona_service(db: Session = Depends(get_async_db)) -> PersonaService:
     return PersonaService(db)
 
 

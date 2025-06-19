@@ -10,6 +10,7 @@ from .phishing_category import PhishingCategory, PhishingCategoryEnum
 from .social_account import SocialAccount, SocialProvider
 from .user import User
 from .user_point import UserPoint
+from .api_key import ApiKey
 
 # __all__ 정의 (from app.models import * 사용 시 임포트할 대상 명시)
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "PhishingCategory",
     "PhishingCategoryEnum",
     "PhishingCase",
+    "ApiKey",
 ]

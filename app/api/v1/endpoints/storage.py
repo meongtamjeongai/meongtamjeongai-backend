@@ -71,7 +71,8 @@ def get_upload_presigned_url(
     object_key = f"{category.value}/images/{uuid.uuid4()}.{file_extension}"
 
     # S3 서비스를 사용하여 업로드용(PUT) Presigned URL 생성
-    url = s3_service.generate_presigned_url(object_key=object_key, for_upload=True)
+    url = s3_service.generate_presigned_url(
+        object_key=object_key, for_upload=True)
 
     return PresignedUrlResponse(url=url, object_key=object_key)
 
@@ -95,7 +96,8 @@ def get_download_presigned_url(
     이 URL은 짧은 만료 시간을 가지며, 비공개 S3 객체에 대한 임시 접근 권한을 부여합니다.
     """
     # S3 서비스를 사용하여 다운로드용(GET) Presigned URL 생성
-    url = s3_service.generate_presigned_url(object_key=object_key, for_upload=False)
+    url = s3_service.generate_presigned_url(
+        object_key=object_key, for_upload=False)
 
     return PresignedUrlResponse(url=url, object_key=object_key)
 

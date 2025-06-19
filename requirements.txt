@@ -1,7 +1,7 @@
 # fastapi_backend/requirements.txt
 fastapi
 uvicorn[standard]
-psycopg2-binary # PostgreSQL 드라이버
+asyncpg  # PostgreSQL 비동기 드라이버
 sqlalchemy # ORM
 alembic # 데이터베이스 마이그레이션 도구
 pydantic[email] # 데이터 유효성 검사 (이메일 유효성 포함)
@@ -14,3 +14,6 @@ python-jose[cryptography] # JWT 처리
 boto3 # AWS S3 클라이언트
 scalar-fastapi
 Pillow # 이미지 처리
+httptools # HTTP 요청 처리
+uvloop; sys_platform != 'win32' # Windows에서는 uvloop 사용 안함, Linux/MacOS에서 성능 향상
+httpx # HTTP 클라이언트

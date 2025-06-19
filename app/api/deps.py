@@ -1,167 +1,135 @@
-# fastapi_backend/app/api/deps.py
-# API 엔드포인트에서 사용될 공통 의존성 함수들
-
+# app/api/deps.py
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import List, Optional, Tuple
 
-# 👇 추가: 쿼리 파라미터를 위한 Query 클래스
-from fastapi import Depends, HTTPException, Query, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, Query, Request, status
+from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from jose import ExpiredSignatureError, JWTError, jwt
 from pydantic import ValidationError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.core.config import settings
-from app.crud import crud_user
-from app.db.session import get_db
+from app.core.security import verify_password
+from app.crud import crud_api_key, crud_user
+from app.db.session import get_async_db
 from app.models.user import User as UserModel
 from app.schemas.token import TokenPayload
 
-# tokenUrl을 새로 만든 ID/Password 로그인 엔드포인트 경로로 변경합니다.
-# 이렇게 하면 Swagger UI의 'Authorize' 버튼을 눌렀을 때 ID/PW 입력 창이 뜨고,
-# 성공 시 자동으로 API 요청 헤더에 토큰이 포함됩니다.
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login/password"
 )
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-# 소스에서 토큰을 가져오는 의존성 함수
-async def get_token_from_various_sources(
-    # 1. 표준 OAuth2 방식 (Authorization: Bearer ... 헤더)
+async def get_current_principal(
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
     token_from_header: Optional[str] = Depends(reusable_oauth2),
-    # 2. 쿼리 파라미터 방식 (?token=...)
-    token_from_query: Optional[str] = Query(
-        None, description="인증을 위한 JWT Access Token"
-    ),
-) -> str:
+    api_key_from_header: Optional[str] = Depends(api_key_header),
+) -> Tuple[UserModel, List[str]]:
     """
-    여러 소스에서 JWT 토큰을 가져옵니다.
-    우선순위: Authorization 헤더 > 'token' 쿼리 파라미터
-    토큰이 없으면 401 에러를 발생시킵니다.
+    JWT 또는 API 키를 사용하여 현재 요청의 주체(Principal)를 식별하고,
+    (사용자 객체, 보유 스코프 목록) 튜플을 반환합니다.
     """
-    if token_from_header:
-        return token_from_header
-    if token_from_query:
-        return token_from_query
-
-    # 두 방법 모두 토큰이 없는 경우
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-
-async def get_current_user(
-    db: Session = Depends(get_db),
-    token: str = Depends(get_token_from_various_sources),  # 새로운 방식
-) -> UserModel:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
     )
 
-    if not token:
-        # get_token_from_various_sources 에서 이미 처리하지만, 방어적으로 코드 유지
-        raise credentials_exception
-
-    try:
-        # 디버깅을 위해, 검증 없이 먼저 페이로드를 디코딩하여 만료 시간 확인
+    if token_from_header:
         try:
-            unverified_payload = jwt.decode(
-                token,
-                options={
-                    "verify_signature": False,
-                    "verify_aud": False,
-                    "verify_iss": False,
-                },
+            payload = jwt.decode(
+                token_from_header, settings.SECRET_KEY, algorithms=[
+                    settings.ALGORITHM]
             )
-            exp_timestamp = unverified_payload.get("exp")
-            exp_datetime = (
-                datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
-                if exp_timestamp
-                else "N/A"
-            )
-            now_utc = datetime.now(timezone.utc)
-            print(
-                f"deps.get_current_user: ➡️ Token received. Exp: {exp_datetime} | Now: {now_utc}"
-            )
-        except Exception:
-            print(
-                "deps.get_current_user: ➡️ Token received (could not pre-decode for logging)."
-            )
-
-        # 실제 토큰 검증 (서명, 만료 시간 등)
-        payload_dict = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-        )
-        print(
-            f"deps.get_current_user: ✅ Token validation successful. Payload: {payload_dict}"
-        )
-
-        user_id_from_payload: Optional[Any] = payload_dict.get("sub")
-        if user_id_from_payload is None:
-            print("deps.get_current_user: ❌ Token payload missing 'sub' (user_id).")
+            token_data = TokenPayload(sub=str(payload.get("sub")))
+            user_id = int(token_data.sub)
+        except (JWTError, ValidationError, ValueError):
             raise credentials_exception
 
-        token_data = TokenPayload(sub=str(user_id_from_payload))
-        user_id = int(token_data.sub)
+        user = await crud_user.get_user(db, user_id=user_id)
+        if not user:
+            raise credentials_exception
 
-    except ExpiredSignatureError:
-        print("deps.get_current_user: ❌ TOKEN EXPIRED. Raising 401.")
-        raise credentials_exception
-    except JWTError as e:
-        print(f"deps.get_current_user: ❌ JWTError during token decoding: {e}")
-        raise credentials_exception
-    except (
-        ValidationError,
-        ValueError,
-    ) as e:
-        print(
-            f"deps.get_current_user: ❌ Token payload validation/conversion error: {e}"
-        )
-        raise credentials_exception
-    except Exception as e:
-        print(
-            f"deps.get_current_user: ❌ Unexpected error during token processing: {e}"
-        )
-        raise credentials_exception
+        scopes = ["admin:all"] if user.is_superuser else ["user:all"]
+        request.state.current_user = user
+        request.state.current_scopes = scopes
+        return user, scopes
 
-    user = crud_user.get_user(db, user_id=user_id)
-    if user is None:
-        print(f"deps.get_current_user: ❌ User with ID {user_id} not found in DB.")
-        raise credentials_exception
+    if api_key_from_header:
+        parts = api_key_from_header.split("_")
+        if len(parts) != 2:
+            raise credentials_exception
+        prefix = parts[0]
 
-    print(f"deps.get_current_user: ✅ User {user.id} ({user.email}) found.")
+        db_api_key = await crud_api_key.get_api_key_by_prefix(db, key_prefix=prefix)
+
+        if not db_api_key or not verify_password(api_key_from_header, db_api_key.hashed_key):
+            raise credentials_exception
+
+        if db_api_key.expires_at and db_api_key.expires_at < datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="API Key has expired.")
+
+        db_api_key.last_used_at = datetime.now(timezone.utc)
+        db.add(db_api_key)
+        await db.flush()
+
+        user = db_api_key.user
+        if not user:
+            raise credentials_exception
+
+        scopes = db_api_key.scopes
+        request.state.current_user = user
+        request.state.current_scopes = scopes
+        return user, scopes
+
+    raise credentials_exception
+
+
+class HasScope:
+    def __init__(self, required_scopes: List[str]):
+        self.required_scopes = set(required_scopes)
+
+    def __call__(
+        self,
+        principal: Tuple[UserModel, List[str]
+                         ] = Depends(get_current_principal),
+    ) -> None:
+        user, current_scopes_list = principal
+        current_scopes = set(current_scopes_list)
+
+        if "admin:all" in current_scopes:
+            return
+
+        if not self.required_scopes.issubset(current_scopes):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Not enough permissions. Required scopes: {', '.join(self.required_scopes)}",
+            )
+
+
+async def get_current_user(
+    principal: Tuple[UserModel, List[str]] = Depends(get_current_principal)
+) -> UserModel:
+    user, _ = principal
     return user
 
 
 async def get_current_active_user(
-    current_user: UserModel = Depends(get_current_user),
+    user: UserModel = Depends(get_current_user),
 ) -> UserModel:
-    if not crud_user.is_active(current_user):
-        print(f"deps.get_current_active_user: ❌ User {current_user.id} is inactive.")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
-        )
-
-    print(f"deps.get_current_active_user: ✅ User {current_user.id} is active.")
-    return current_user
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return user
 
 
 async def get_current_active_superuser(
-    current_user: UserModel = Depends(get_current_active_user),
+    user: UserModel = Depends(get_current_active_user),
 ) -> UserModel:
-    if not crud_user.is_superuser(current_user):
-        print(
-            f"deps.get_current_active_superuser: ❌ User {current_user.id} is not a superuser."
-        )
+    if not user.is_superuser:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The user doesn't have enough privileges",
+            status_code=403, detail="The user doesn't have enough privileges"
         )
-    print(
-        f"deps.get_current_active_superuser: ✅ User {current_user.id} is a superuser."
-    )
-    return current_user
+    return user

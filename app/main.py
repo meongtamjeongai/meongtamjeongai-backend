@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.core.exceptions import add_exception_handlers
 from app.core.logging_config import setup_logging
 from app.crud import crud_phishing
-from app.db.session import SessionLocal, get_db
+from app.db.session import AsyncSessionLocal, get_async_db
 from app.db.session import engine as db_engine
 from app.middleware.logging_middleware import LoggingMiddleware
 
@@ -71,13 +71,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 데이터베이스 연결 테스트 및 초기 데이터 삽입
     if db_engine:
         try:
-            with SessionLocal() as db:
+            # 비동기 세션을 사용하여 DB 연결 테스트
+            async with AsyncSessionLocal() as db:
                 # DB 연결 테스트
-                db.execute(text("SELECT 1"))
+                await db.execute(text("SELECT 1"))
                 logger.info("✅ Database connection test successful on startup.")
 
                 # 👇 [신규] 피싱 카테고리 초기 데이터 삽입
-                crud_phishing.populate_categories(db)
+                await crud_phishing.populate_categories(db)
 
         except Exception as e:
             logger.error(
@@ -154,7 +155,7 @@ async def scalar_html():
 
 
 @app.get("/db-status", tags=["데이터베이스"])
-async def get_db_status(db: SQLAlchemySession = Depends(get_db)):
+async def get_async_db_status(db: SQLAlchemySession = Depends(get_async_db)):
     try:
         result = db.execute(text("SELECT version()")).scalar_one_or_none()
         if result:

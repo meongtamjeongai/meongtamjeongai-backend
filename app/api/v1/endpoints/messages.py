@@ -7,16 +7,16 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user  # 실제 인증 의존성 함수 임포트
-from app.db.session import get_db
+from app.db.session import get_async_db
 from app.models.user import User as UserModel
-from app.schemas.message import MessageCreate, MessageResponse, ChatMessageResponse 
+from app.schemas.message import ChatMessageResponse, MessageCreate, MessageResponse
 from app.services.message_service import MessageService
 
 # 이 라우터는 /conversations/{conversation_id}/messages 와 같은 경로로 등록될 것임
 router = APIRouter()
 
 
-def get_message_service(db: Session = Depends(get_db)) -> MessageService:
+async def get_message_service(db: Session = Depends(get_async_db)) -> MessageService:
     return MessageService(db)
 
 
@@ -61,9 +61,9 @@ async def read_conversation_messages(
 
 @router.post(
     "/",
-    response_model=ChatMessageResponse, # ⭐️ 변경: List[MessageResponse] -> ChatMessageResponse
+    response_model=ChatMessageResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="새 메시지 전송 및 구조화된 AI 응답 받기", # ⭐️ 변경: 요약 설명 업데이트
+    summary="새 메시지 전송 및 구조화된 AI 응답 받기",  # ⭐️ 변경: 요약 설명 업데이트
     description="대화방에 새 메시지를 전송하고, AI의 응답 및 추천 질문 등을 포함한 구조화된 객체를 받습니다.",
     tags=["메시지 (Messages)"],
 )
@@ -80,8 +80,7 @@ async def send_new_message_in_conversation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Message content cannot be empty.",
         )
-    
-    # ⭐️ 변경 없음: 서비스 계층의 반환값이 바뀌었지만, FastAPI가 자동으로 직렬화하므로 호출 코드는 동일합니다.
+
     chat_response = await message_service.send_new_message(
         conversation_id=conversation_id,
         message_in=message_in,

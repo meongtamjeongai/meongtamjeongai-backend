@@ -39,6 +39,13 @@ from .user import (
 )
 from .user_point import UserPointBase, UserPointResponse, UserPointUpdate
 
+from .api_key import (  # 👈 [추가]
+    ApiKeyCreate,
+    ApiKeyResponse,
+    ApiKeyScope,
+    NewApiKeyResponse,
+)
+
 # __all__ 정의 (from app.schemas import * 사용 시 임포트할 대상 명시)
 __all__ = [
     "BaseModel",
@@ -76,4 +83,8 @@ __all__ = [
     "PhishingCaseCreate",
     "PhishingCaseUpdate",
     "PhishingCaseResponse",
+    "ApiKeyCreate",
+    "ApiKeyResponse",
+    "ApiKeyScope",
+    "NewApiKeyResponse",
 ]

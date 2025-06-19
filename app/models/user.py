@@ -1,19 +1,18 @@
-# fastapi_backend/app/models/user.py
+# app/models/user.py
 
 from typing import TYPE_CHECKING, List
 
 from sqlalchemy import Boolean, DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-# 상대 경로 임포트로 수정
 from .base import Base
 
 if TYPE_CHECKING:
-    # 상대 경로 임포트로 수정
-    from .conversation import Conversation  # noqa: F401
-    from .persona import Persona  # noqa: F401
-    from .social_account import SocialAccount  # noqa: F401
-    from .user_point import UserPoint  # noqa: F401
+    from .api_key import ApiKey
+    from .conversation import Conversation
+    from .persona import Persona
+    from .social_account import SocialAccount
+    from .user_point import UserPoint
 
 
 class User(Base):
@@ -41,11 +40,15 @@ class User(Base):
         server_default=func.now(),
         server_onupdate=func.now(),
     )
-    is_guest: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_guest: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False)
 
     profile_image_key: Mapped[str] = mapped_column(String(2048), nullable=True)
 
     # Relationships
+    api_keys: Mapped[List["ApiKey"]] = relationship(
+        "ApiKey", back_populates="user", cascade="all, delete-orphan"
+    )
     social_accounts: Mapped[List["SocialAccount"]] = relationship(
         "SocialAccount", back_populates="user", cascade="all, delete-orphan"
     )

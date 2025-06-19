@@ -10,7 +10,7 @@ from app.api.deps import get_current_active_user  # 실제 인증 의존성 함�
 
 # 메시지 관련 라우터 임포트
 from app.api.v1.endpoints import messages as messages_router
-from app.db.session import get_db
+from app.db.session import get_async_db
 from app.models.user import User as UserModel
 from app.schemas.conversation import ConversationCreate, ConversationResponse
 from app.services.conversation_service import ConversationService
@@ -18,7 +18,9 @@ from app.services.conversation_service import ConversationService
 router = APIRouter()
 
 
-def get_conversation_service(db: Session = Depends(get_db)) -> ConversationService:
+async def get_conversation_service(
+    db: Session = Depends(get_async_db),
+) -> ConversationService:
     return ConversationService(db)
 
 

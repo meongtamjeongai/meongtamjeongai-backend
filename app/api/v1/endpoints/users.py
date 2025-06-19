@@ -1,20 +1,24 @@
 # fastapi_backend/app/api/v1/endpoints/users.py
 # 사용자 정보 관련 API 엔드포인트 정의
 
-from fastapi import APIRouter, Depends, status, Form, UploadFile, File
-from sqlalchemy.orm import Session  # Session 임포트 추가
 from typing import Optional
 
-from app.db.session import get_db  # get_db 임포트 추가
-from app.services.user_service import UserService  # UserService 임포트
-from app.schemas.user import UserClientProfileResponse, UserUpdate  # UserUpdate 임포트 추가
-from app.models.user import User as UserModel
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from sqlalchemy.orm import Session  # Session 임포트 추가
+
 from app.api.deps import get_current_active_user
+from app.db.session import get_async_db  # get_async_db 임포트 추가
+from app.models.user import User as UserModel
+from app.schemas.user import (  # UserUpdate 임포트 추가
+    UserClientProfileResponse,
+    UserUpdate,
+)
+from app.services.user_service import UserService  # UserService 임포트
 
 router = APIRouter()
 
 
-def get_user_service(db: Session = Depends(get_db)) -> UserService:
+async def get_user_service(db: Session = Depends(get_async_db)) -> UserService:
     return UserService(db)
 
 
@@ -22,12 +26,13 @@ def get_user_service(db: Session = Depends(get_db)) -> UserService:
     "/me",
     response_model=UserClientProfileResponse,
     summary="현재 로그인된 사용자 프로필 조회",
-    tags=["사용자 (Users)"]
+    tags=["사용자 (Users)"],
 )
 async def read_current_user_me(
-    current_user: UserModel = Depends(get_current_active_user)
+    current_user: UserModel = Depends(get_current_active_user),
 ):
     return current_user
+
 
 # --- 새로운 엔드포인트 추가: PUT /me ---
 
@@ -37,12 +42,12 @@ async def read_current_user_me(
     response_model=UserClientProfileResponse,
     summary="사용자 정보 수정",
     description="현재 로그인된 사용자의 정보를 수정합니다 (예: 사용자 이름).",
-    tags=["사용자 (Users)"]
+    tags=["사용자 (Users)"],
 )
 async def update_current_user_info(
     user_in: UserUpdate,
     current_user: UserModel = Depends(get_current_active_user),
-    user_service: UserService = Depends(get_user_service)
+    user_service: UserService = Depends(get_user_service),
 ):
     """
     사용자 정보를 업데이트합니다.
@@ -50,8 +55,10 @@ async def update_current_user_info(
       (예: `{"username": "새로운이름"}`)
     """
     updated_user = user_service.update_user_info(
-        current_user=current_user, user_in=user_in)
+        current_user=current_user, user_in=user_in
+    )
     return updated_user
+
 
 # --- 새로운 엔드포인트 추가: DELETE /me ---
 
@@ -62,11 +69,11 @@ async def update_current_user_info(
     response_model=dict,
     summary="회원 탈퇴 (계정 비활성화)",
     description="현재 로그인된 사용자의 계정을 비활성화합니다 (Soft Delete).",
-    tags=["사용자 (Users)"]
+    tags=["사용자 (Users)"],
 )
 async def deactivate_current_user_account(
     current_user: UserModel = Depends(get_current_active_user),
-    user_service: UserService = Depends(get_user_service)
+    user_service: UserService = Depends(get_user_service),
 ):
     """
     현재 사용자의 계정을 비활성화(탈퇴 처리)합니다.
@@ -74,6 +81,7 @@ async def deactivate_current_user_account(
     """
     result = user_service.deactivate_current_user(current_user=current_user)
     return result
+
 
 # multipart/form-data 처리를 위한 새로운 프로필 업데이트 엔드포인트
 @router.post(

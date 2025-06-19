@@ -44,7 +44,13 @@ class Settings(BaseSettings):
     S3_BUCKET_NAME: str | None = None
 
     # gemini api
-    GEMINI_MODEL_NAME: str = Field(default="models/gemini-2.5-flash-preview-05-20")
+    GEMINI_MODEL_NAME: str = Field(
+        default="models/gemini-2.5-flash-preview-05-20")
+
+    # API Key 정책 설정
+    API_KEY_PREFIX_LENGTH: int = 8
+    API_KEY_SECRET_LENGTH: int = 32
+    API_KEY_MAX_RETRIES: int = 5  # 키 생성 재시도 횟수
 
 
 settings = Settings()
