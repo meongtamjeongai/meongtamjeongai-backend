@@ -6,6 +6,10 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from firebase_admin import auth as firebase_auth
 
+from fastapi import UploadFile
+from typing import Optional
+import uuid
+
 from app.crud import crud_user
 from app.models.user import User as UserModel
 
@@ -163,3 +167,64 @@ class UserService:
         시스템에 슈퍼유저가 한 명이라도 존재하는지 확인하여 bool 값을 반환합니다.
         """
         return self.db.query(UserModel).filter(UserModel.is_superuser == True).first() is not None
+    
+    # --- ✅ [추가] multipart/form-data를 처리하는 새로운 서비스 메서드 ---
+    async def update_user_profile_with_image(
+        self,
+        *,
+        current_user: UserModel,
+        username: str,
+        profile_image_file: Optional[UploadFile] = None,
+    ) -> UserModel:
+        """
+        사용자 프로필 정보와 이미지 파일을 받아 업데이트합니다.
+        1. 이미지가 있으면 S3에 업로드
+        2. DB에 사용자 정보(username, image_key) 업데이트
+        3. 기존 이미지가 있으면 S3에서 삭제
+        """
+        s3_image_key = None
+        previous_image_key = current_user.profile_image_key
+
+        # 1. 새로운 프로필 이미지가 제공된 경우 S3에 업로드
+        if profile_image_file:
+            # 파일 내용을 바이트로 읽기
+            image_data = await profile_image_file.read()
+            # 파일 확장자 가져오기
+            file_extension = profile_image_file.filename.split(".")[-1]
+            # 고유한 파일명 생성
+            filename = f"users/{uuid.uuid4()}.{file_extension}"
+
+            try:
+                self.s3_service.upload_bytes_to_s3(
+                    data_bytes=image_data,
+                    object_key=filename,
+                    content_type=profile_image_file.content_type,
+                )
+                s3_image_key = filename
+                print(f"✅ S3 이미지 업로드 성공. Key: {s3_image_key}")
+            except Exception as e:
+                # S3 업로드 실패 시, 작업을 중단하고 에러 발생
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"S3 이미지 업로드에 실패했습니다: {e}",
+                )
+
+        # 2. DB 업데이트를 위한 데이터 준비
+        # UserUpdate 스키마를 사용하여 업데이트할 데이터 구성
+        update_data = UserUpdate(username=username)
+        if s3_image_key:
+            # 새 이미지가 업로드된 경우에만 image_key 업데이트
+            update_data.profile_image_key = s3_image_key
+        
+        # DB 업데이트
+        updated_user = crud_user.update_user(
+            self.db, db_user=current_user, user_in=update_data
+        )
+
+        # 3. DB 업데이트 성공 후, 이전 S3 이미지 삭제
+        # 새로운 이미지가 등록되었고, 이전 이미지가 존재했다면 삭제
+        if s3_image_key and previous_image_key:
+            print(f"새로운 프로필 이미지 등록. 이전 이미지 삭제 시도: {previous_image_key}")
+            self.s3_service.delete_object(object_key=previous_image_key)
+
+        return updated_user

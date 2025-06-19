@@ -1,8 +1,9 @@
 # fastapi_backend/app/api/v1/endpoints/users.py
 # 사용자 정보 관련 API 엔드포인트 정의
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Form, UploadFile, File
 from sqlalchemy.orm import Session  # Session 임포트 추가
+from typing import Optional
 
 from app.db.session import get_db  # get_db 임포트 추가
 from app.services.user_service import UserService  # UserService 임포트
@@ -73,3 +74,32 @@ async def deactivate_current_user_account(
     """
     result = user_service.deactivate_current_user(current_user=current_user)
     return result
+
+# multipart/form-data 처리를 위한 새로운 프로필 업데이트 엔드포인트
+@router.post(
+    "/me/profile",
+    response_model=UserClientProfileResponse,
+    summary="사용자 프로필 정보 및 이미지 업데이트 (multipart/form-data)",
+    description="사용자 이름(username)과 프로필 이미지 파일을 함께 받아 업데이트합니다. 플러터 클라이언트 전용입니다.",
+    tags=["사용자 (Users)"],
+)
+async def update_current_user_profile_form_data(
+    current_user: UserModel = Depends(get_current_active_user),
+    user_service: UserService = Depends(get_user_service),
+    # --- Form 필드로 텍스트 데이터 받기 ---
+    username: str = Form(...),
+    # --- UploadFile로 이미지 파일 받기 (선택적) ---
+    profile_image: Optional[UploadFile] = File(None),
+):
+    """
+    multipart/form-data 형식으로 사용자 프로필을 업데이트합니다.
+    - **username**: 변경할 사용자 이름 (필수)
+    - **profile_image**: 업로드할 프로필 이미지 파일 (선택)
+    """
+    # 서비스 계층의 새 함수를 호출하여 실제 로직 처리
+    updated_user = await user_service.update_user_profile_with_image(
+        current_user=current_user,
+        username=username,
+        profile_image_file=profile_image,
+    )
+    return updated_user
