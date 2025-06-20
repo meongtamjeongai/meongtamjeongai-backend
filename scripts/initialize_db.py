@@ -2,9 +2,17 @@
 
 # ❌ 개발용도로만 사용해야함! 이 스크립트는 데이터베이스를 초기화하고 테스트 데이터를 생성합니다.
 
+import os
 import asyncio
 import sys
 from pathlib import Path
+
+APP_ENV = os.getenv("APP_ENV", "dev")
+
+# 개발단게에서만 호출이 가능하도록 합니다.
+if APP_ENV == "prod":
+    print("❌ ERROR: This script cannot be run in the 'prod' environment.")
+    sys.exit(1)
 
 # 프로젝트 루트 경로를 sys.path에 추가하여 app 모듈을 임포트할 수 있도록 합니다.
 # 이 스크립트는 프로젝트 루트에서 `python scripts/initialize_db.py` 형태로 실행되는 것을 가정합니다.

@@ -63,9 +63,7 @@ class Conversation(Base):
         order_by="Message.created_at",
     )
 
-    applied_phishing_case: Mapped["PhishingCase"] = relationship(
-        "PhishingCase", lazy="joined"
-    )
+    applied_phishing_case: Mapped["PhishingCase"] = relationship("PhishingCase")
 
     def __repr__(self):
         return f"<Conversation(id={self.id}, user_id={self.user_id}, persona_id={self.persona_id}, title='{self.title}')>"

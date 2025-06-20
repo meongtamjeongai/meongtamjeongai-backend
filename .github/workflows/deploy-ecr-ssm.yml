@@ -1,0 +1,182 @@
+name: "🚀 [Backend] Build, Push to ECR & Deploy via Systems Manager Run Command"
+
+# 동적 실행 이름 (버전 정보 추가)
+run-name: "🚀 Backend v${{ github.event.inputs.image_version }} | ${{ github.event.inputs.run_description }} | by @${{ github.actor }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: "빌드할 Git 참조 (브랜치, 태그 또는 커밋 SHA)"
+        required: true
+        default: "main"
+      image_version:
+        description: "이미지 버전 태그 (예: 1.0.0, 1.0.1-hotfix)"
+        required: true
+        default: "0.0.1"
+      run_description:
+        description: "💬 이 배포의 목적을 입력하세요 (예: 사용자 UI 개선)"
+        required: true
+        default: "Regular Manual Deployment"
+
+# 워크플로우에 필요한 권한 설정
+permissions:
+  id-token: write # AWS OIDC 인증에 필요
+  contents: read  # 소스 코드 체크아웃에 필요
+
+# 비-민감성 구성 정보만 남김
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+  CONTAINER_NAME: fastapi_app_container
+  HOST_PORT: ${{ secrets.BACKEND_HOST_PORT }}
+  CONTAINER_PORT: ${{ secrets.BACKEND_CONTAINER_PORT }}
+  S3_BUCKET_NAME : ${{ secrets.S3_BUCKET_NAME }}
+  PROJECT_NAME: "fastapi-infra"
+  ENVIRONMENT: "dev"
+
+jobs:
+  print_run_info:
+    name: 0. Print Run Information
+    runs-on: ubuntu-latest
+    steps:
+      - name: Display run parameters
+        run: |
+          echo "### 🚀 Backend App Deployment Details" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Git Ref** | \`${{ github.event.inputs.git_ref }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Version** | \`${{ github.event.inputs.image_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Description** | ${{ github.event.inputs.run_description }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered by** | `@${{ github.actor }}` |" >> $GITHUB_STEP_SUMMARY
+
+  build-and-deploy:
+    name: Build, Push to ECR, and Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: print_run_info
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_ref }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get secrets from AWS SSM Parameter Store
+        id: get_secrets
+        run: |
+          echo "Fetching secrets from SSM Parameter Store..."
+          PARAM_DB_URL="/${{ env.PROJECT_NAME }}/${{ env.ENVIRONMENT }}/DATABASE_URL"
+          PARAM_SECRET_KEY="/${{ env.PROJECT_NAME }}/${{ env.ENVIRONMENT }}/FASTAPI_SECRET_KEY"
+          PARAM_FIREBASE_JSON="/${{ env.PROJECT_NAME }}/${{ env.ENVIRONMENT }}/FIREBASE_B64_JSON"
+          PARAM_GEMINI_KEY="/${{ env.PROJECT_NAME }}/${{ env.ENVIRONMENT }}/GEMINI_API_KEY"
+
+          DB_URL=$(aws ssm get-parameter --name "$PARAM_DB_URL" --with-decryption --query "Parameter.Value" --output text)
+          SECRET_KEY=$(aws ssm get-parameter --name "$PARAM_SECRET_KEY" --with-decryption --query "Parameter.Value" --output text)
+          FIREBASE_B64_JSON=$(aws ssm get-parameter --name "$PARAM_FIREBASE_JSON" --with-decryption --query "Parameter.Value" --output text)
+          GEMINI_API_KEY=$(aws ssm get-parameter --name "$PARAM_GEMINI_KEY" --with-decryption --query "Parameter.Value" --output text)
+
+          echo "::add-mask::$DB_URL"; echo "database_url=$DB_URL" >> $GITHUB_OUTPUT
+          echo "::add-mask::$SECRET_KEY"; echo "secret_key=$SECRET_KEY" >> $GITHUB_OUTPUT
+          echo "::add-mask::$FIREBASE_B64_JSON"; echo "firebase_b64_json=$FIREBASE_B64_JSON" >> $GITHUB_OUTPUT
+          echo "::add-mask::$GEMINI_API_KEY"; echo "gemini_api_key=$GEMINI_API_KEY" >> $GITHUB_OUTPUT
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-and-push-image
+        env:
+          IMAGE_VERSION: ${{ github.event.inputs.image_version }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_VERSION }}
+            ${{ env.ECR_REPOSITORY_URL }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ⭐️ 단계 이름 변경: "SSM" -> "Systems Manager Run Command"
+      - name: Deploy to EC2 via Systems Manager Run Command
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_VERSION: ${{ github.event.inputs.image_version }}
+          DATABASE_URL: ${{ steps.get_secrets.outputs.database_url }}
+          SECRET_KEY: ${{ steps.get_secrets.outputs.secret_key }}
+          FIREBASE_B64_JSON: ${{ steps.get_secrets.outputs.firebase_b64_json }}
+          GEMINI_API_KEY: ${{ steps.get_secrets.outputs.gemini_api_key }}
+        run: |
+          set -e
+
+          APP_ENV_VARS=(
+            "DATABASE_URL"
+            "SECRET_KEY"
+            "FIREBASE_B64_JSON"
+            "GEMINI_API_KEY"
+            "S3_BUCKET_NAME"
+          )
+
+          DOCKER_ENV_FLAGS=""
+          for var_name in "${APP_ENV_VARS[@]}"; do
+            DOCKER_ENV_FLAGS+=" -e ${var_name}='__${var_name}__'"
+          done
+
+          COMMAND_SCRIPT=$(cat <<EOF
+          set -e
+          echo ">>> Logging into ECR from EC2 instance..."
+          aws ecr get-login-password --region __AWS_REGION__ | sudo docker login --username AWS --password-stdin __ECR_REGISTRY__
+          echo ">>> Pulling new image: __FULL_IMAGE_URI__"
+          sudo docker pull __FULL_IMAGE_URI__
+          echo ">>> Stopping and removing old container if it exists..."
+          if [ \$(sudo docker ps -q -f name=__CONTAINER_NAME__) ]; then sudo docker stop __CONTAINER_NAME__; fi
+          if [ \$(sudo docker ps -aq -f name=__CONTAINER_NAME__) ]; then sudo docker rm __CONTAINER_NAME__; fi
+          echo ">>> Starting new container..."
+          sudo docker run -d \
+            --name __CONTAINER_NAME__ \
+            -p __HOST_PORT__:__CONTAINER_PORT__ \
+            -e APP_ENV="prod" \
+            -e FIREBASE_SERVICE_ACCOUNT_KEY_PATH="/tmp/firebase_service_account.json" \
+            \${DOCKER_ENV_FLAGS} \
+            --restart always \
+            __FULL_IMAGE_URI__
+          echo ">>> Pruning old docker images..."
+          sudo docker image prune -af
+          echo "✅ Deployment script finished successfully on EC2."
+          EOF
+          )
+
+          FULL_IMAGE_URI="${ECR_REPOSITORY_URL}:${IMAGE_VERSION}"
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__AWS_REGION__/${AWS_REGION}}"
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__ECR_REGISTRY__/${ECR_REGISTRY}}"
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__FULL_IMAGE_URI__/${FULL_IMAGE_URI}}"
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__CONTAINER_NAME__/${CONTAINER_NAME}}"
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__HOST_PORT__/${HOST_PORT}}"
+          COMMAND_SCRIPT="${COMMAND_SCRIPT//__CONTAINER_PORT__/${CONTAINER_PORT}}"
+
+          for var_name in "${APP_ENV_VARS[@]}"; do
+            value="${!var_name}"
+            COMMAND_SCRIPT="${COMMAND_SCRIPT//__${var_name}__/$value}"
+          done
+
+          # ⭐️ 주석 변경: AWS-RunShellScript Document를 사용함을 명시
+          # Create the JSON parameters payload for the AWS-RunShellScript document
+          RUN_COMMAND_PARAMETERS=$(jq -n --arg script "$COMMAND_SCRIPT" '{ "commands": ($script | split("\n")) }')
+          
+          # ⭐️ 출력 메시지 변경
+          echo ">>> Sending deployment script to EC2 instance via Systems Manager Run Command..."
+          aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy image version ${{ env.IMAGE_VERSION }} via GitHub Actions" \
+            --parameters "$RUN_COMMAND_PARAMETERS"

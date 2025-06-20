@@ -19,7 +19,7 @@ FROM python:3.13-slim AS final
 # 비-루트 사용자 생성
 ARG USERNAME=vscode
 ARG USER_UID=1000
-# 💡 [해결책] USER_GID를 USER_UID와 동일한 값으로 직접 설정합니다.
+# USER_GID를 USER_UID와 동일한 값으로 직접 설정합니다.
 ARG USER_GID=1000 
 
 RUN groupadd --gid $USER_GID $USERNAME && \
@@ -39,6 +39,9 @@ COPY --from=builder /workspace/requirements.txt .
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt && \
     rm -rf /wheels
 
+# Gunicorn 설정 파일을 컨테이너에 복사합니다.
+COPY gunicorn.conf.py /workspace/gunicorn.conf.py
+
 # entrypoint 스크립트 복사 및 실행 권한 부여
 COPY ./scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
@@ -51,8 +54,13 @@ RUN chown -R $USERNAME:$USER_GID /workspace
 
 USER $USERNAME
 
+EXPOSE 80
+
 # 컨테이너 시작 시 entrypoint.sh를 먼저 실행
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
+# Gunicorn을 사용하여 FastAPI 애플리케이션 실행
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app.main:app"]
+
 # Uvicorn을 직접 실행
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
+#CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]

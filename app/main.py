@@ -6,19 +6,18 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import firebase_admin
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI
 from firebase_admin import credentials
 from pydantic import BaseModel
 from scalar_fastapi import get_scalar_api_reference
 from sqlalchemy import text
-from sqlalchemy.orm import Session as SQLAlchemySession
 
 from app.api.v1.api import api_router_v1
 from app.core.config import settings
 from app.core.exceptions import add_exception_handlers
 from app.core.logging_config import setup_logging
 from app.crud import crud_phishing
-from app.db.session import AsyncSessionLocal, get_async_db
+from app.db.session import AsyncSessionLocal
 from app.db.session import engine as db_engine
 from app.middleware.logging_middleware import LoggingMiddleware
 
@@ -152,24 +151,3 @@ async def scalar_html():
         dark_mode=False,
         servers=servers,
     )
-
-
-@app.get("/db-status", tags=["데이터베이스"])
-async def get_async_db_status(db: SQLAlchemySession = Depends(get_async_db)):
-    try:
-        result = db.execute(text("SELECT version()")).scalar_one_or_none()
-        if result:
-            return {
-                "status": "success",
-                "message": "Database connection is healthy.",
-                "db_version": result,
-            }
-        else:
-            raise HTTPException(
-                status_code=500, detail="Failed to retrieve DB version."
-            )
-    except Exception as e:
-        # 로깅 시스템이 전역 예외 핸들러에서 처리하므로 여기서는 로깅 불필요
-        raise HTTPException(
-            status_code=500, detail=f"An unexpected error occurred: {str(e)}"
-        )

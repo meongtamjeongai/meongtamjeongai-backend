@@ -1,0 +1,21 @@
+# fastapi_backend/requirements.txt
+fastapi
+gunicorn # WSGI 서버
+uvicorn[standard]
+psycopg2-binary # PostgreSQL 드라이버 (비동기 사용 시 asyncpg 사용)
+asyncpg  # PostgreSQL 비동기 드라이버
+sqlalchemy # ORM
+alembic # 데이터베이스 마이그레이션 도구
+pydantic[email] # 데이터 유효성 검사 (이메일 유효성 포함)
+pydantic-settings # Pydantic v2+ 환경 변수 로딩용
+passlib[bcrypt] # 비밀번호 해싱
+python-multipart # 파일 업로드 처리
+firebase-admin # Firebase Admin SDK (Firebase ID 토큰 검증용)
+google-genai # Google GenAI API 클라이언트
+python-jose[cryptography] # JWT 처리
+boto3 # AWS S3 클라이언트
+scalar-fastapi
+Pillow # 이미지 처리
+httptools # HTTP 요청 처리
+uvloop; sys_platform != 'win32' # Windows에서는 uvloop 사용 안함, Linux/MacOS에서 성능 향상
+httpx # HTTP 클라이언트

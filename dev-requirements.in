@@ -1,0 +1,4 @@
+# 운영 의존성을 모두 포함
+-r requirements.in
+
+# 개발 및 CI/CD에만 필요한 도구

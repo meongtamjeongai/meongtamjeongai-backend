@@ -1,4 +1,5 @@
 # app/services/s3_service.py
+import asyncio
 import logging
 
 import boto3
@@ -77,7 +78,7 @@ class S3Service:
     # --- 서버에서 직접 바이트 데이터를 업로드하는 함수 ---
     def upload_bytes_to_s3(self, data_bytes: bytes, object_key: str, content_type: str):
         if not self.bucket_name:
-            raise HTTPException(...) # 생략
+            raise HTTPException(...)  # 생략
         try:
             self.s3_client.put_object(
                 Bucket=self.bucket_name,
@@ -88,7 +89,7 @@ class S3Service:
         except ClientError as e:
             # 에러 처리 로직
             raise HTTPException(status_code=500, detail=f"S3 upload failed: {e}")
-        
+
     def delete_object(self, object_key: str) -> bool:
         """
         S3 버킷에서 특정 객체를 삭제합니다.
@@ -115,6 +116,21 @@ class S3Service:
             )
             # 존재하지 않는 객체를 삭제 시도해도 에러가 발생하지 않으므로, 대부분 권한 문제.
             return False
+
+    async def upload_bytes_to_s3_async(
+        self, data_bytes: bytes, object_key: str, content_type: str
+    ):
+        """[비동기] 별도 스레드에서 동기 S3 업로드 함수를 실행합니다."""
+        try:
+            # asyncio.to_thread를 사용하여 동기 함수를 비동기적으로 실행
+            await asyncio.to_thread(
+                self.upload_bytes_to_s3, data_bytes, object_key, content_type
+            )
+        except Exception as e:
+            # upload_bytes_to_s3에서 발생한 예외를 여기서 다시 잡아서 처리
+            logger.error(f"🔥 S3 비동기 업로드 래퍼에서 오류 발생: {e}", exc_info=True)
+            # 이미 HTTPException이 발생했으므로 다시 발생시키거나 새로운 예외를 발생시킴
+            raise e
 
 
 s3_service = S3Service()

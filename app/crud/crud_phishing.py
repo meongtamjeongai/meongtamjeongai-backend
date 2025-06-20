@@ -26,8 +26,7 @@ async def populate_categories(db: AsyncSession):
         for category_enum in PhishingCategoryEnum:
             db_category = PhishingCategory(
                 code=category_enum.value,
-                description=PhishingCategoryEnum.get_description(
-                    category_enum),
+                description=PhishingCategoryEnum.get_description(category_enum),
             )
             db.add(db_category)
         await db.flush()
@@ -45,21 +44,23 @@ async def get_all_phishing_cases(
     db: AsyncSession, skip: int = 0, limit: int = 100
 ) -> List[PhishingCase]:
     """모든 피싱 사례 목록을 페이지네이션하여 조회합니다."""
-    stmt = select(PhishingCase).order_by(
-        PhishingCase.id.desc()).offset(skip).limit(limit)
+    stmt = (
+        select(PhishingCase).order_by(PhishingCase.id.desc()).offset(skip).limit(limit)
+    )
     result = await db.execute(stmt)
     return result.scalars().all()
 
 
-async def create_phishing_case(db: AsyncSession, *, case_in: PhishingCaseCreate) -> PhishingCase:
+async def create_phishing_case(
+    db: AsyncSession, *, case_in: PhishingCaseCreate
+) -> PhishingCase:
     """새로운 피싱 사례를 생성합니다."""
     db_case = PhishingCase(
         title=case_in.title,
         content=case_in.content,
         category_code=case_in.category_code.value,
         case_date=case_in.case_date,
-        reference_url=str(
-            case_in.reference_url) if case_in.reference_url else None,
+        reference_url=str(case_in.reference_url) if case_in.reference_url else None,
     )
     db.add(db_case)
     await db.flush()
@@ -85,7 +86,9 @@ async def update_phishing_case(
     return db_case
 
 
-async def delete_phishing_case(db: AsyncSession, *, case_id: int) -> Optional[PhishingCase]:
+async def delete_phishing_case(
+    db: AsyncSession, *, case_id: int
+) -> Optional[PhishingCase]:
     """ID로 특정 피싱 사례를 삭제합니다."""
     db_case = await get_phishing_case(db, case_id=case_id)
     if db_case:
@@ -103,5 +106,14 @@ async def get_random_phishing_case(
         stmt = stmt.where(PhishingCase.category_code == category_code)
 
     stmt = stmt.order_by(func.random()).limit(1)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def get_category_by_code(
+    db: AsyncSession, code: str
+) -> Optional[PhishingCategory]:
+    """Code로 특정 피싱 카테고리를 조회합니다."""
+    stmt = select(PhishingCategory).where(PhishingCategory.code == code)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()

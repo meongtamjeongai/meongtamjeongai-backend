@@ -6,6 +6,7 @@ from typing import Optional
 
 from pydantic import Field
 
+from app.models.phishing_category import PhishingCategoryEnum
 from app.schemas.base_schema import BaseModel
 from app.schemas.persona import PersonaResponse  # 대화방 목록에 페르소나 정보 포함
 from app.schemas.phishing import PhishingCaseResponse
@@ -33,6 +34,17 @@ class ConversationCreate(
         None, max_length=255, description="대화방 제목 (미지정 시 자동 생성 가능)"
     )
     # user_id는 인증된 사용자로부터 자동으로 설정
+
+
+class ConversationCreateWithCategory(ConversationCreate):
+    """
+    특정 피싱 카테고리를 지정하여 대화방을 생성하기 위한 요청 스키마입니다.
+    ConversationCreate를 상속받아 persona_id와 title 필드를 재사용합니다.
+    """
+
+    category_code: PhishingCategoryEnum = Field(
+        ..., description="적용할 피싱 시나리오의 유형(카테고리)"
+    )
 
 
 class ConversationResponse(ConversationBase):
@@ -67,4 +79,16 @@ class ConversationCreateAdmin(BaseModel):
     persona_id: int = Field(..., description="대화할 페르소나의 ID")
     title: Optional[str] = Field(
         None, max_length=255, description="대화방 제목 (선택 사항)"
+    )
+
+
+# 관리자가 특정 카테고리를 지정하여 대화방을 생성하기 위한 스키마
+class ConversationCreateAdminWithCategory(ConversationCreateAdmin):
+    """
+    관리자가 특정 피싱 카테고리를 지정하여 대화방을 생성할 때 사용하는 스키마.
+    ConversationCreateAdmin을 상속받아 user_id, persona_id, title 필드를 재사용합니다.
+    """
+
+    category_code: PhishingCategoryEnum = Field(
+        ..., description="적용할 피싱 시나리오의 유형(카테고리)"
     )

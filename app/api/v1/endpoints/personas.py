@@ -39,9 +39,10 @@ async def read_personas(
     persona_service: PersonaService = Depends(get_persona_service),
     current_user: Optional[UserModel] = Depends(get_current_user),
 ):
-    personas = persona_service.get_all_personas_for_user(
+    personas = await persona_service.get_all_personas_for_user(
         current_user=current_user, skip=skip, limit=limit
     )
+
     return personas
 
 

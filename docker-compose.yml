@@ -1,5 +1,4 @@
 # meongtamdjeong_tutorial/docker-compose.yml
-# (수정된 최종 버전)
 
 services:
   app:
@@ -13,12 +12,14 @@ services:
       - .env.dev
     environment:
       - AWS_PROFILE=meong-local-dev
+      - APP_ENV=dev
     ports:
-      - "8000:8000"
+      - "8000:80"
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /workspace/app
+    #command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /workspace/app
+    command: gunicorn -c /workspace/gunicorn.conf.py app.main:app
     entrypoint: []
     networks:
       - meong

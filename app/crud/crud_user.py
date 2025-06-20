@@ -3,35 +3,43 @@ from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import Query, joinedload, selectinload
 
 from app.core.security import get_password_hash, verify_password
 from app.models.user import User
 from app.models.user_point import UserPoint
 from app.schemas.user import UserCreate, UserUpdate
 
+# ✅ User 모델을 위한 공통 로딩 옵션 변수 정의
+_USER_EAGER_LOADING_OPTIONS = (
+    selectinload(User.social_accounts),
+    joinedload(User.user_point),
+)
+
+
+# ✅ User 모델을 위한 기본 쿼리 헬퍼 함수 정의
+def _get_base_user_query() -> Query:
+    """User 모델에 대한 기본 SELECT 쿼리 및 공통 로딩 옵션을 반환합니다."""
+    return select(User).options(*_USER_EAGER_LOADING_OPTIONS)
+
 
 async def get_user(db: AsyncSession, user_id: int) -> Optional[User]:
     """주어진 ID로 사용자를 조회합니다. (Eager Loading 적용)"""
-    stmt = (
-        select(User)
-        .options(selectinload(User.social_accounts), joinedload(User.user_point))
-        .where(User.id == user_id)
-    )
+    stmt = _get_base_user_query().where(User.id == user_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
     """주어진 이메일로 사용자를 조회합니다."""
-    stmt = select(User).where(User.email == email)
+    stmt = _get_base_user_query().where(User.email == email)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
 
 async def get_users(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[User]:
     """여러 사용자를 조회합니다 (페이지네이션)."""
-    stmt = select(User).offset(skip).limit(limit)
+    stmt = _get_base_user_query().offset(skip).limit(limit)
     result = await db.execute(stmt)
     return result.scalars().all()
 
@@ -54,7 +62,8 @@ async def create_user(db: AsyncSession, *, user_in: UserCreate) -> User:
     await db.flush()
 
     await db.refresh(db_user)
-    return db_user
+    # 🔄 생성 후 완전한 객체를 반환하기 위해 다시 조회하는 로직 추가
+    return await get_user(db, user_id=db_user.id)
 
 
 async def update_user(

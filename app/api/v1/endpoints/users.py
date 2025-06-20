@@ -54,7 +54,7 @@ async def update_current_user_info(
     - **Request Body**: `UserUpdate` 스키마에 맞는 수정할 필드.
       (예: `{"username": "새로운이름"}`)
     """
-    updated_user = user_service.update_user_info(
+    updated_user = await user_service.update_user_info(
         current_user=current_user, user_in=user_in
     )
     return updated_user
@@ -79,7 +79,7 @@ async def deactivate_current_user_account(
     현재 사용자의 계정을 비활성화(탈퇴 처리)합니다.
     이 작업 후에는 해당 계정으로 더 이상 로그인할 수 없습니다.
     """
-    result = user_service.deactivate_current_user(current_user=current_user)
+    result = await user_service.deactivate_current_user(current_user=current_user)
     return result
 
 

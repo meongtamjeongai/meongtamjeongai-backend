@@ -8,7 +8,6 @@ from app import crud
 from app.api.deps import (
     HasScope,
     get_current_active_superuser,
-    get_current_principal,
 )
 from app.db.session import get_async_db
 from app.models.user import User as UserModel
@@ -17,7 +16,11 @@ from app.schemas.api_key import (
     ApiKeyResponse,
     NewApiKeyResponse,
 )
-from app.schemas.conversation import ConversationAdminResponse, ConversationCreateAdmin
+from app.schemas.conversation import (
+    ConversationAdminResponse,
+    ConversationCreateAdmin,
+    ConversationCreateAdminWithCategory,
+)
 from app.schemas.message import MessageResponse
 from app.schemas.phishing import (
     PhishingCaseCreate,
@@ -34,11 +37,15 @@ from app.services.user_service import UserService
 router = APIRouter(tags=["관리자 (Admin)"])
 
 
-async def get_conversation_service(db: AsyncSession = Depends(get_async_db)) -> ConversationService:
+async def get_conversation_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> ConversationService:
     return ConversationService(db)
 
 
-async def get_message_service(db: AsyncSession = Depends(get_async_db)) -> MessageService:
+async def get_message_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> MessageService:
     return MessageService(db)
 
 
@@ -46,11 +53,15 @@ async def get_user_service(db: AsyncSession = Depends(get_async_db)) -> UserServ
     return UserService(db)
 
 
-async def get_phishing_service(db: AsyncSession = Depends(get_async_db)) -> PhishingService:
+async def get_phishing_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> PhishingService:
     return PhishingService(db)
 
 
-async def get_api_key_service(db: AsyncSession = Depends(get_async_db)) -> ApiKeyService:
+async def get_api_key_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> ApiKeyService:
     return ApiKeyService(db)
 
 
@@ -80,7 +91,9 @@ async def update_user_by_admin(
     user_in: UserUpdate,
     user_service: UserService = Depends(get_user_service),
 ):
-    updated_user = await user_service.update_user_by_admin(user_id=user_id, user_in=user_in)
+    updated_user = await user_service.update_user_by_admin(
+        user_id=user_id, user_in=user_in
+    )
     return updated_user
 
 
@@ -133,10 +146,11 @@ async def check_superuser_existence(
 async def read_all_conversations(
     skip: int = 0,
     limit: int = 100,
-    conversation_service: ConversationService = Depends(
-        get_conversation_service),
+    conversation_service: ConversationService = Depends(get_conversation_service),
 ):
-    return await conversation_service.get_all_conversations_admin(skip=skip, limit=limit)
+    return await conversation_service.get_all_conversations_admin(
+        skip=skip, limit=limit
+    )
 
 
 @router.get(
@@ -163,11 +177,14 @@ async def read_conversation_messages_admin(
 )
 async def delete_conversation_by_admin(
     conversation_id: int,
-    conversation_service: ConversationService = Depends(
-        get_conversation_service),
+    conversation_service: ConversationService = Depends(get_conversation_service),
 ):
-    await conversation_service.delete_conversation_admin(conversation_id=conversation_id)
-    return {"message": f"Conversation with ID {conversation_id} has been successfully deleted."}
+    await conversation_service.delete_conversation_admin(
+        conversation_id=conversation_id
+    )
+    return {
+        "message": f"Conversation with ID {conversation_id} has been successfully deleted."
+    }
 
 
 @router.post(
@@ -179,10 +196,11 @@ async def delete_conversation_by_admin(
 )
 async def create_conversation_by_admin(
     conversation_in: ConversationCreateAdmin,
-    conversation_service: ConversationService = Depends(
-        get_conversation_service),
+    conversation_service: ConversationService = Depends(get_conversation_service),
 ):
-    return await conversation_service.start_new_conversation_admin(conversation_in=conversation_in)
+    return await conversation_service.start_new_conversation_admin(
+        conversation_in=conversation_in
+    )
 
 
 @router.post(
@@ -276,4 +294,63 @@ async def delete_phishing_case_by_admin(
     case_id: int, service: PhishingService = Depends(get_phishing_service)
 ):
     await service.delete_case(case_id=case_id)
-    return {"message": f"Phishing case with ID {case_id} has been successfully deleted."}
+    return {
+        "message": f"Phishing case with ID {case_id} has been successfully deleted."
+    }
+
+
+@router.post(
+    "/conversations",
+    response_model=ConversationAdminResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="대화방 생성 - 랜덤 시나리오 (관리자 전용)",
+    dependencies=[Depends(get_current_active_superuser)],
+)
+async def create_conversation_by_admin(
+    conversation_in: ConversationCreateAdmin,
+    conversation_service: ConversationService = Depends(get_conversation_service),
+    user_service: UserService = Depends(get_user_service),  # user_service 추가
+):
+    # 기존 로직은 start_new_conversation을 호출하므로 랜덤 시나리오가 적용됨
+    target_user = await user_service.get_user_by_id(conversation_in.user_id)
+    return await conversation_service.start_new_conversation(
+        conversation_in=conversation_in, current_user=target_user
+    )
+
+
+# 특정 카테고리(DB 우선)로 대화방을 생성하는 관리자용 엔드포인트
+@router.post(
+    "/conversations/with-category",
+    response_model=ConversationAdminResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="대화방 생성 - 특정 카테고리/DB 우선 (관리자 전용)",
+    dependencies=[Depends(get_current_active_superuser)],
+)
+async def create_conversation_with_category_by_admin(
+    conversation_in: ConversationCreateAdminWithCategory,
+    conversation_service: ConversationService = Depends(get_conversation_service),
+    user_service: UserService = Depends(get_user_service),
+):
+    target_user = await user_service.get_user_by_id(conversation_in.user_id)
+    return await conversation_service.start_conversation_with_category(
+        conversation_in=conversation_in, current_user=target_user
+    )
+
+
+# ✅ [추가] 특정 카테고리(AI 생성)로 대화방을 생성하는 관리자용 엔드포인트
+@router.post(
+    "/conversations/with-ai-case",
+    response_model=ConversationAdminResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="대화방 생성 - 특정 카테고리/AI 생성 (관리자 전용)",
+    dependencies=[Depends(get_current_active_superuser)],
+)
+async def create_conversation_with_ai_case_by_admin(
+    conversation_in: ConversationCreateAdminWithCategory,
+    conversation_service: ConversationService = Depends(get_conversation_service),
+    user_service: UserService = Depends(get_user_service),
+):
+    target_user = await user_service.get_user_by_id(conversation_in.user_id)
+    return await conversation_service.start_conversation_with_ai_case(
+        conversation_in=conversation_in, current_user=target_user
+    )

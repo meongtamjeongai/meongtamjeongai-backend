@@ -97,7 +97,10 @@ class MessageService:
         )
 
         try:
-            gemini_response, debug_contents = await self.gemini_service.get_chat_response(
+            (
+                gemini_response,
+                debug_contents,
+            ) = await self.gemini_service.get_chat_response(
                 system_prompt=db_conversation.persona.system_prompt,
                 history=history,
                 user_message=message_in.content,
@@ -108,14 +111,15 @@ class MessageService:
         except (ConnectionError, HTTPException) as e:
             detail = e.detail if isinstance(e, HTTPException) else str(e)
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
+            )
 
         s3_image_key = None
         if message_in.image_base64:
             try:
                 image_data = base64.b64decode(message_in.image_base64)
                 filename = f"messages/{uuid.uuid4()}.png"
-                self.s3_service.upload_bytes_to_s3(
+                self.s3_service.upload_bytes_to_s3_async(
                     data_bytes=image_data, object_key=filename, content_type="image/png"
                 )
                 s3_image_key = filename
@@ -166,7 +170,9 @@ class MessageService:
             gemini_token_usage=token_usage,
         )
 
-        conversation = await crud_conversation.get_conversation(self.db, conversation_id=conversation_id)
+        conversation = await crud_conversation.get_conversation(
+            self.db, conversation_id=conversation_id
+        )
         if conversation:
             conversation.last_message_at = ai_message.created_at
             await crud_conversation.update_conversation(self.db, db_conv=conversation)

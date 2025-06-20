@@ -12,7 +12,11 @@ from app.api.deps import get_current_active_user  # 실제 인증 의존성 함�
 from app.api.v1.endpoints import messages as messages_router
 from app.db.session import get_async_db
 from app.models.user import User as UserModel
-from app.schemas.conversation import ConversationCreate, ConversationResponse
+from app.schemas.conversation import (
+    ConversationCreate,
+    ConversationCreateWithCategory,
+    ConversationResponse,
+)
 from app.services.conversation_service import ConversationService
 
 router = APIRouter()
@@ -42,7 +46,7 @@ async def read_user_conversations(
     """
     현재 사용자의 대화방 목록을 조회합니다. `last_message_at` 기준으로 내림차순 정렬됩니다.
     """
-    conversations = conversation_service.get_all_conversations_for_user(
+    conversations = await conversation_service.get_all_conversations_for_user(
         current_user=current_user, skip=skip, limit=limit
     )
     return conversations
@@ -66,7 +70,64 @@ async def create_new_conversation(
     - **persona_id**: 대화할 페르소나의 ID (필수)
     - **title**: 대화방 제목 (선택)
     """
-    return conversation_service.start_new_conversation(
+    return await conversation_service.start_new_conversation(
+        conversation_in=conversation_in, current_user=current_user
+    )
+
+
+@router.post(
+    "/with-ai-case",
+    response_model=ConversationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="새 대화방 생성 (항상 AI가 시나리오 생성)",
+    description="""
+    지정된 피싱 카테고리를 기반으로 **항상 AI가 새로운 시나리오를 생성**하여 적용합니다.
+    이 엔드포인트는 DB에 저장된 기존 사례를 사용하지 않습니다.
+    """,
+    tags=["대화방 (Conversations)"],
+)
+async def create_conversation_with_ai_case(
+    conversation_in: ConversationCreateWithCategory,  # 기존 스키마 재사용
+    conversation_service: ConversationService = Depends(get_conversation_service),
+    current_user: UserModel = Depends(get_current_active_user),
+):
+    """
+    항상 AI가 생성하는 시나리오로 새로운 대화방을 생성합니다.
+    - **persona_id**: 대화할 페르소나의 ID (필수)
+    - **title**: 대화방 제목 (선택)
+    - **category_code**: AI가 생성할 피싱 유형 (필수, 예: "Smishing")
+    """
+    # 3단계에서 만든 새 서비스 메서드 호출
+    return await conversation_service.start_conversation_with_ai_case(
+        conversation_in=conversation_in, current_user=current_user
+    )
+
+
+@router.post(
+    "/with-category",
+    response_model=ConversationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="새 대화방 생성 (특정 카테고리 지정)",
+    description="""
+    특정 피싱 카테고리를 지정하여 새로운 대화방을 생성합니다.
+    - 해당 카테고리의 피싱 사례가 있으면 그중 하나를 랜덤으로 적용합니다.
+    - 만약 사례가 없으면, AI가 즉석에서 해당 유형의 시나리오를 생성하여 적용합니다.
+    """,
+    tags=["대화방 (Conversations)"],
+)
+async def create_conversation_with_category(
+    conversation_in: ConversationCreateWithCategory,  # 1단계에서 만든 새 스키마 사용
+    conversation_service: ConversationService = Depends(get_conversation_service),
+    current_user: UserModel = Depends(get_current_active_user),
+):
+    """
+    새로운 대화방을 특정 카테고리와 함께 생성합니다.
+    - **persona_id**: 대화할 페르소나의 ID (필수)
+    - **title**: 대화방 제목 (선택)
+    - **category_code**: 적용할 피싱 유형 (필수, 예: "GovScam", "LoanScam")
+    """
+    # 3단계에서 만든 새 서비스 메서드 호출
+    return await conversation_service.start_conversation_with_category(
         conversation_in=conversation_in, current_user=current_user
     )
 
@@ -90,7 +151,7 @@ async def read_conversation_by_id(
     (현재는 메시지 목록은 별도 API로 조회)
     """
     # 서비스 계층에서 conversation_id와 current_user.id를 사용하여 권한 확인 및 조회
-    db_conversation = conversation_service.get_conversation_by_id_for_user(
+    db_conversation = await conversation_service.get_conversation_by_id_for_user(
         conversation_id=conversation_id, current_user=current_user
     )
     # get_conversation_by_id_for_user 내부에서 찾지 못하면 404 발생
@@ -114,7 +175,7 @@ async def delete_user_conversation(
     """
     사용자의 특정 대화방을 삭제합니다. 관련된 모든 메시지도 함께 삭제됩니다.
     """
-    deleted_conversation = conversation_service.delete_existing_conversation(
+    deleted_conversation = await conversation_service.delete_existing_conversation(
         conversation_id=conversation_id, current_user=current_user
     )
     # delete_existing_conversation 내부에서 권한 및 존재 여부 확인 후 404 또는 403 발생 가능

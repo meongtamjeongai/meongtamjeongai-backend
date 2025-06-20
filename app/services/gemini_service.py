@@ -12,16 +12,27 @@ from google import genai
 from google.api_core import exceptions as google_api_exceptions
 from google.genai import types
 from PIL import Image
+from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.models.message import Message as MessageModel
 from app.models.message import SenderType
 from app.models.phishing_case import PhishingCase
+from app.models.phishing_category import PhishingCategory
 from app.schemas.gemini import GeminiChatResponse
 from app.schemas.phishing import PhishingImageAnalysisResponse
 
 # 로거 설정
 logger = logging.getLogger(__name__)
+
+
+# AI가 생성할 피싱 사례의 형식을 정의하는 내부용 Pydantic 모델
+class GeneratedPhishingCase(BaseModel):
+    title: str = Field(..., description="AI가 생성한 피싱 시나리오의 제목")
+    content: str = Field(
+        ...,
+        description="AI가 생성한 피싱 시나리오의 구체적인 내용 (문자 메시지, 이메일 등)",
+    )
 
 
 class GeminiService:
@@ -292,4 +303,58 @@ class GeminiService:
             logger.error(f"🔥 이미지 분석 API 호출 중 오류: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500, detail="이미지 분석 중 오류가 발생했습니다."
+            )
+
+    # 피싱 사례를 즉석에서 생성하는 새로운 메서드
+    async def generate_phishing_case_on_the_fly(
+        self, category: PhishingCategory
+    ) -> GeneratedPhishingCase:
+        """
+        주어진 피싱 카테고리 정보를 바탕으로 새로운 피싱 사례를 AI가 생성합니다.
+        """
+        if not self.is_available():
+            raise ConnectionError("AI 서비스를 사용할 수 없습니다.")
+
+        # 1. 이 기능을 위한 전용 시스템 프롬프트 정의
+        system_prompt = f"""
+        당신은 창의적인 시나리오 작가입니다. 당신의 임무는 주어진 피싱 유형에 대한 현실감 넘치는 예시 시나리오를 만드는 것입니다.
+        사용자가 피싱 공격을 학습하고 대비할 수 있도록, 실제 상황처럼 보이는 제목과 내용을 생성해야 합니다.
+        반드시 지정된 JSON 형식(`title`, `content`)에 맞춰 응답해야 합니다.
+
+        [생성할 피싱 유형 정보]
+        - 코드: {category.code}
+        - 설명: {category.description}
+        """
+
+        # 2. 사용자 입력 구성
+        user_prompt_text = (
+            f"'{category.code}' 유형에 맞는 피싱 시나리오를 하나 만들어줘."
+        )
+
+        # 3. API 호출 준비
+        generation_config = types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+            response_schema=GeneratedPhishingCase,  # 내부용 스키마 사용
+            temperature=0.8,  # 창의성을 위해 온도를 약간 높임
+        )
+
+        # 4. API 호출
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=settings.GEMINI_MODEL_NAME,
+                contents=[user_prompt_text],
+                config=generation_config,
+            )
+
+            # 5. 결과 파싱 및 반환
+            json_response = json.loads(response.text)
+            logger.info(
+                f"✅ AI-Generated Phishing Case for '{category.code}': {json_response}"
+            )
+            return GeneratedPhishingCase(**json_response)
+        except Exception as e:
+            logger.error(f"🔥 AI 피싱 사례 생성 중 오류 발생: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500, detail="AI 시나리오 생성 중 오류가 발생했습니다."
             )
