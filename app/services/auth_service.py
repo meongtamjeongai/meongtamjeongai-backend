@@ -130,7 +130,14 @@ class AuthService:
             )
         )
         if social_account:
-            return social_account.user
+            # ❌ 이전 코드: return social_account.user
+            
+            # ✅ 더 안전한 코드: user 객체가 로드되었음을 보장합니다.
+            # (위의 CRUD 수정으로 인해 social_account.user는 이미 로드되어 있습니다.)
+            # 만약 CRUD를 수정하지 않았다면, 여기서 다시 user를 조회해야 합니다.
+            user = await crud_user.get_user(self.db, user_id=social_account.user_id)
+            return user
+            #return social_account.user # CRUD 수정 후에는 이대로도 안전합니다.
 
         user = None
         if email:

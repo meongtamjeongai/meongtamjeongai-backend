@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.social_account import SocialAccount, SocialProvider
 from app.schemas.social_account import SocialAccountCreate
@@ -19,9 +20,13 @@ async def get_social_account_by_provider_and_id(
     db: AsyncSession, *, provider: SocialProvider, provider_user_id: str
 ) -> Optional[SocialAccount]:
     """특정 제공자와 해당 제공자의 사용자 ID로 소셜 계정을 조회합니다."""
-    stmt = select(SocialAccount).where(
-        SocialAccount.provider == provider,
-        SocialAccount.provider_user_id == provider_user_id,
+    stmt = (
+        select(SocialAccount)
+        .options(selectinload(SocialAccount.user))
+        .where(
+            SocialAccount.provider == provider,
+            SocialAccount.provider_user_id == provider_user_id,
+        )
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
