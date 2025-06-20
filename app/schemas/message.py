@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.models.message import SenderType  # Enum 임포트
 from app.schemas.base_schema import BaseModel
@@ -15,14 +15,17 @@ class MessageBase(BaseModel):
 
 
 class MessageCreate(MessageBase):
-    # conversation_id는 Path 파라미터로 받거나, 서비스 로직에서 설정
-    # sender_type은 사용자 메시지 전송 시 'user'로 고정, AI 응답은 서버에서 'ai'로 설정
-    # gemini_token_usage는 AI 응답 시 서버에서 설정
-
-    # 이미지가 없는 텍스트 메시지를 위해 Optional로 설정하여 호환성을 유지합니다.
+    content: Optional[str] = Field(None, description="메시지 내용")
     image_base64: Optional[str] = Field(None, description="Base64-encoded image data")
 
-    pass
+    @model_validator(mode="after")
+    def check_content_or_image_exists(self) -> "MessageCreate":
+        """
+        content와 image_base64 필드 중 적어도 하나는 값이 있는지 확인합니다.
+        """
+        if (not self.content or not self.content.strip()) and not self.image_base64:
+            raise ValueError("Either 'content' or 'image_base64' must be provided.")
+        return self
 
 
 class MessageResponse(MessageBase):
@@ -33,7 +36,6 @@ class MessageResponse(MessageBase):
     created_at: datetime
     image_key: Optional[str] = None
 
-    # Pydantic V2
     model_config = {"from_attributes": True}
 
 

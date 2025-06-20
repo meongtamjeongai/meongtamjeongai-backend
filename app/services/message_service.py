@@ -97,13 +97,23 @@ class MessageService:
         )
 
         try:
+            # ✅ content가 None일 경우를 대비하여 기본 텍스트를 설정합니다.
+            user_message_content = message_in.content if message_in.content else ""
+
+            # ✅ 이미지만 있고 텍스트가 없는 경우, AI에 전달할 기본 프롬프트를 추가합니다.
+            #    이는 AI가 이미지의 맥락을 더 잘 이해하도록 돕습니다.
+            if message_in.image_base64 and not user_message_content.strip():
+                gemini_prompt_text = "이 이미지는 어떤 내용이야? 자세히 설명해줘."
+            else:
+                gemini_prompt_text = user_message_content
+
             (
                 gemini_response,
                 debug_contents,
             ) = await self.gemini_service.get_chat_response(
                 system_prompt=db_conversation.persona.system_prompt,
                 history=history,
-                user_message=message_in.content,
+                user_message=gemini_prompt_text,
                 image_base64=message_in.image_base64,
                 phishing_case=db_conversation.applied_phishing_case,
                 starting_message=db_conversation.persona.starting_message,
@@ -119,16 +129,25 @@ class MessageService:
             try:
                 image_data = base64.b64decode(message_in.image_base64)
                 filename = f"messages/{uuid.uuid4()}.png"
-                self.s3_service.upload_bytes_to_s3_async(
+                # 비동기 S3 업로드 함수를 사용합니다.
+                await self.s3_service.upload_bytes_to_s3_async(
                     data_bytes=image_data, object_key=filename, content_type="image/png"
                 )
                 s3_image_key = filename
             except Exception as e:
                 print(f"S3 이미지 업로드 실패: {e}")
 
+        # ✅ MessageCreate 객체의 content가 None일 수 있으므로,
+        #    미리 처리해둔 user_message_content를 사용합니다.
+        #    이렇게 하면 crud_message.create_message 함수에 None이 전달되는 것을 방지합니다.
+        user_message_to_save = MessageCreate(
+            content=user_message_content,
+            image_base64=message_in.image_base64,  # image_base64는 그대로 전달
+        )
+
         user_db_message = await crud_message.create_message(
             self.db,
-            message_in=message_in,
+            message_in=user_message_to_save,
             conversation_id=conversation_id,
             sender_type=SenderType.USER,
             image_key=s3_image_key,

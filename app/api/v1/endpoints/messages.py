@@ -3,7 +3,7 @@
 
 from typing import List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user  # 실제 인증 의존성 함수 임포트
@@ -75,12 +75,6 @@ async def send_new_message_in_conversation(
     message_service: MessageService = Depends(get_message_service),
     current_user: UserModel = Depends(get_current_active_user),
 ):
-    if not message_in.content or not message_in.content.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Message content cannot be empty.",
-        )
-
     chat_response = await message_service.send_new_message(
         conversation_id=conversation_id,
         message_in=message_in,

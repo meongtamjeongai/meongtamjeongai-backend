@@ -54,10 +54,15 @@ async def create_message(
     image_key: Optional[str] = None,
 ) -> Message:
     """새로운 메시지를 생성합니다."""
+
+    # ✅ message_in.content가 None일 경우를 대비하여, DB에 저장할 값을 결정합니다.
+    #    DB의 content 컬럼은 NOT NULL이므로, None 대신 빈 문자열을 저장합니다.
+    db_content = message_in.content if message_in.content is not None else ""
+
     db_message = Message(
         conversation_id=conversation_id,
         sender_type=sender_type,
-        content=message_in.content,
+        content=db_content,
         gemini_token_usage=gemini_token_usage,
         image_key=image_key,
     )

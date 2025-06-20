@@ -76,7 +76,7 @@ async def read_persona_by_id(
     persona_service: PersonaService = Depends(get_persona_service),
     current_user: Optional[UserModel] = Depends(get_current_user),
 ):
-    db_persona = persona_service.get_persona_by_id(persona_id=persona_id)
+    db_persona = await persona_service.get_persona_by_id(persona_id=persona_id)
     if db_persona is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Persona not found"
@@ -120,7 +120,7 @@ async def update_persona_by_id(
     - **persona_id**: 수정할 페르소나의 ID.
     - **Request Body**: `PersonaUpdate` 스키마에 맞는 수정할 필드들.
     """
-    updated_persona = persona_service.update_existing_persona(
+    updated_persona = await persona_service.update_existing_persona(
         persona_id=persona_id, persona_in=persona_in, current_user=current_user
     )
     if updated_persona is None:
@@ -150,7 +150,7 @@ async def delete_persona_by_id(
     페르소나를 삭제합니다.
     - **persona_id**: 삭제할 페르소나의 ID.
     """
-    deleted_persona = persona_service.delete_existing_persona(
+    deleted_persona = await persona_service.delete_existing_persona(
         persona_id=persona_id, current_user=current_user
     )
     if deleted_persona is None:
