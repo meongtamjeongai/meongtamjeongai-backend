@@ -1,12 +1,11 @@
 # app/core/config.py
 import os
 
-from pydantic import Field, SecretStr
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_ENV = os.getenv("APP_ENV", "dev")
 env_file_path = f".env.{APP_ENV}"
-
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -22,7 +21,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
 
     # Database
-    DATABASE_URL: SecretStr
+    DATABASE_URL: str
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
 

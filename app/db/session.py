@@ -15,7 +15,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 # settings.DATABASE_URL을 Pydantic URL 객체에서 문자열로 변환합니다.
-database_url_str = settings.DATABASE_URL.get_secret_value()
+database_url_str = settings.DATABASE_URL
 
 # SQLAlchemy의 make_url을 사용하여 URL을 안전하게 파싱합니다.
 # 이 방법은 URL의 각 구성요소를 분리해주므로, 단순 문자열 치환보다 훨씬 안정적입니다.
