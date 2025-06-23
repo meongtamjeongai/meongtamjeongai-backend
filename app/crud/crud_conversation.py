@@ -73,9 +73,6 @@ async def get_all_conversations(
     result = await db.execute(stmt)
     return result.scalars().all()
 
-
-# ⬇️ create_conversation과 같이 객체를 새로 만드는 함수는 큰 변경이 필요 없지만,
-# 생성 후 완전한 객체를 반환하기 위해 get_conversation을 호출하는 부분은 그대로 유지합니다.
 async def create_conversation(
     db: AsyncSession, *, conversation_in: ConversationCreate, user_id: int
 ) -> Conversation:
@@ -89,8 +86,6 @@ async def create_conversation(
     # 생성 후, Eager Loading이 적용된 완전한 객체를 반환하기 위해 get_conversation 호출
     return await get_conversation(db, conversation_id=db_conversation.id)
 
-
-# ... (update_conversation, delete_conversation 등 다른 함수는 거의 변경 없음) ...
 async def update_conversation(
     db: AsyncSession, *, db_conv: Conversation
 ) -> Conversation:
@@ -98,4 +93,12 @@ async def update_conversation(
     db.add(db_conv)
     await db.flush()
     await db.refresh(db_conv)
+    return db_conv
+
+async def delete_conversation(db: AsyncSession, *, conversation_id: int) -> Optional[Conversation]:
+    """주어진 ID의 대화방을 삭제합니다."""
+    db_conv = await get_conversation(db, conversation_id=conversation_id)
+    if db_conv:
+        await db.delete(db_conv)
+        await db.flush()
     return db_conv
