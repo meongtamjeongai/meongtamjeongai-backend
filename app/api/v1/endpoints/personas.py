@@ -59,7 +59,7 @@ async def create_new_persona(
     persona_service: PersonaService = Depends(get_persona_service),
     current_user: UserModel = Depends(get_current_active_user),
 ):
-    return persona_service.create_new_persona(
+    return await persona_service.create_new_persona(
         persona_in=persona_in, creator=current_user
     )
 
