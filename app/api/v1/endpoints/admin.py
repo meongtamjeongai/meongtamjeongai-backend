@@ -186,23 +186,6 @@ async def delete_conversation_by_admin(
         "message": f"Conversation with ID {conversation_id} has been successfully deleted."
     }
 
-
-@router.post(
-    "/conversations",
-    response_model=ConversationAdminResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="대화방 생성 (관리자 전용)",
-    dependencies=[Depends(get_current_active_superuser)],
-)
-async def create_conversation_by_admin(
-    conversation_in: ConversationCreateAdmin,
-    conversation_service: ConversationService = Depends(get_conversation_service),
-):
-    return await conversation_service.start_new_conversation_admin(
-        conversation_in=conversation_in
-    )
-
-
 @router.post(
     "/api-keys",
     response_model=NewApiKeyResponse,
@@ -297,7 +280,6 @@ async def delete_phishing_case_by_admin(
     return {
         "message": f"Phishing case with ID {case_id} has been successfully deleted."
     }
-
 
 @router.post(
     "/conversations",
