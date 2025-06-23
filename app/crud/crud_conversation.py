@@ -8,11 +8,14 @@ from sqlalchemy.orm import Query, joinedload, selectinload
 from app.models.conversation import Conversation
 from app.models.phishing_case import PhishingCase
 from app.schemas.conversation import ConversationCreate
+from app.models.user import User
 
-# ✅ 1. 공통 로딩 옵션을 담은 튜플 변수를 정의합니다.
-# 이 변수는 대화방 객체를 조회할 때 항상 함께 로드할 관계들을 명시합니다.
 _CONVERSATION_EAGER_LOADING_OPTIONS = (
-    joinedload(Conversation.user),
+    # Conversation.user를 로드할 때, User의 하위 관계까지 즉시 로딩하도록 연쇄적으로 설정합니다.
+    joinedload(Conversation.user).options(
+        selectinload(User.social_accounts), 
+        joinedload(User.user_point)
+    ),
     selectinload(Conversation.persona),
     selectinload(Conversation.applied_phishing_case).joinedload(PhishingCase.category),
 )
