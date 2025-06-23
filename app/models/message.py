@@ -42,7 +42,7 @@ class Message(Base):
     gemini_token_usage: Mapped[int] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[DateTime] = mapped_column(
-        DateTime, default=func.now(), server_default=func.now(), index=True
+        DateTime(timezone=True), default=func.now(), index=True
     )
 
     # Relationships

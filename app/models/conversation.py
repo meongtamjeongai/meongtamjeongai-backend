@@ -44,12 +44,11 @@ class Conversation(Base):
     created_at: Mapped[DateTime] = mapped_column(
         DateTime, default=func.now(), server_default=func.now()
     )
+    
     last_message_at: Mapped[DateTime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         default=func.now(),
-        onupdate=func.now(),
         server_default=func.now(),
-        server_onupdate=func.now(),
         index=True,
     )
 
