@@ -7,6 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.message import Message, SenderType
 from app.schemas.message import MessageCreate
 
+async def save_message(db: AsyncSession, *, db_message: Message) -> Message:
+    """
+    미리 생성된 Message 객체를 받아 데이터베이스에 저장하고, 저장된 객체를 반환합니다.
+    """
+    db.add(db_message)
+    await db.flush()
+    await db.refresh(db_message)
+    return db_message
 
 async def get_message(
     db: AsyncSession, message_id: int, conversation_id: Optional[int] = None
@@ -43,7 +51,7 @@ async def get_messages_by_conversation(
     result = await db.execute(stmt)
     return result.scalars().all()
 
-
+"""
 async def create_message(
     db: AsyncSession,
     *,
@@ -53,8 +61,6 @@ async def create_message(
     gemini_token_usage: Optional[int] = None,
     image_key: Optional[str] = None,
 ) -> Message:
-    """새로운 메시지를 생성합니다."""
-
     # ✅ message_in.content가 None일 경우를 대비하여, DB에 저장할 값을 결정합니다.
     #    DB의 content 컬럼은 NOT NULL이므로, None 대신 빈 문자열을 저장합니다.
     db_content = message_in.content if message_in.content is not None else ""
@@ -70,3 +76,4 @@ async def create_message(
     await db.flush()
     await db.refresh(db_message)
     return db_message
+"""

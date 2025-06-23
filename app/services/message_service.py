@@ -5,9 +5,11 @@ from typing import List
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone
 
 from app.crud import crud_conversation, crud_message
 from app.models.message import Message, SenderType
+from app.models.message import Message as MessageModel
 from app.models.user import User
 from app.schemas.message import (
     ChatMessageResponse,
@@ -76,7 +78,9 @@ class MessageService:
     async def send_new_message(
         self, conversation_id: int, message_in: MessageCreate, current_user: User
     ) -> ChatMessageResponse:
-        """대화방에 새 메시지를 전송하고 AI 응답을 받습니다."""
+        """대화방에 새 메시지를 전송하고 AI 응답을 받아 저장합니다."""
+
+        # 1. 대화방 소유권 및 존재 여부 확인
         if current_user.is_superuser:
             db_conversation = await crud_conversation.get_conversation(
                 self.db, conversation_id=conversation_id
@@ -92,21 +96,50 @@ class MessageService:
                 detail="Conversation not found or not accessible.",
             )
 
+        # 2. S3에 이미지 업로드 (이미지가 있는 경우)
+        s3_image_key = None
+        if message_in.image_base64:
+            try:
+                image_data = base64.b64decode(message_in.image_base64)
+                filename = f"messages/{uuid.uuid4()}.png"
+                await self.s3_service.upload_bytes_to_s3_async(
+                    data_bytes=image_data, object_key=filename, content_type="image/png"
+                )
+                s3_image_key = filename
+            except Exception as e:
+                # S3 업로드 실패 시에도 로깅 후 대화는 계속 진행
+                print(f"S3 이미지 업로드 실패: {e}")
+
+        # 3. 사용자 메시지를 DB에 저장
+        user_message_timestamp = datetime.now(timezone.utc)
+        user_message_obj = MessageModel(
+            conversation_id=conversation_id,
+            sender_type=SenderType.USER,
+            content=message_in.content if message_in.content else "",
+            image_key=s3_image_key,
+            created_at=user_message_timestamp,
+        )
+        user_db_message = await crud_message.save_message(
+            self.db, db_message=user_message_obj
+        )
+
+        # 대화방의 마지막 업데이트 시간을 사용자 메시지 시간으로 갱신
+        db_conversation.last_message_at = user_db_message.created_at
+        await crud_conversation.update_conversation(self.db, db_conv=db_conversation)
+
+        # 4. Gemini AI에 응답 요청
         history = await crud_message.get_messages_by_conversation(
             self.db, conversation_id=conversation_id, limit=None, sort_asc=True
         )
+        
+        user_message_content = message_in.content if message_in.content else ""
+        gemini_prompt_text = (
+            "이 이미지는 어떤 내용이야? 자세히 설명해줘."
+            if message_in.image_base64 and not user_message_content.strip()
+            else user_message_content
+        )
 
         try:
-            # ✅ content가 None일 경우를 대비하여 기본 텍스트를 설정합니다.
-            user_message_content = message_in.content if message_in.content else ""
-
-            # ✅ 이미지만 있고 텍스트가 없는 경우, AI에 전달할 기본 프롬프트를 추가합니다.
-            #    이는 AI가 이미지의 맥락을 더 잘 이해하도록 돕습니다.
-            if message_in.image_base64 and not user_message_content.strip():
-                gemini_prompt_text = "이 이미지는 어떤 내용이야? 자세히 설명해줘."
-            else:
-                gemini_prompt_text = user_message_content
-
             (
                 gemini_response,
                 debug_contents,
@@ -124,50 +157,24 @@ class MessageService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
             )
 
-        s3_image_key = None
-        if message_in.image_base64:
-            try:
-                image_data = base64.b64decode(message_in.image_base64)
-                filename = f"messages/{uuid.uuid4()}.png"
-                # 비동기 S3 업로드 함수를 사용합니다.
-                await self.s3_service.upload_bytes_to_s3_async(
-                    data_bytes=image_data, object_key=filename, content_type="image/png"
-                )
-                s3_image_key = filename
-            except Exception as e:
-                print(f"S3 이미지 업로드 실패: {e}")
-
-        # ✅ MessageCreate 객체의 content가 None일 수 있으므로,
-        #    미리 처리해둔 user_message_content를 사용합니다.
-        #    이렇게 하면 crud_message.create_message 함수에 None이 전달되는 것을 방지합니다.
-        user_message_to_save = MessageCreate(
-            content=user_message_content,
-            image_base64=message_in.image_base64,  # image_base64는 그대로 전달
-        )
-
-        user_db_message = await crud_message.create_message(
-            self.db,
-            message_in=user_message_to_save,
-            conversation_id=conversation_id,
-            sender_type=SenderType.USER,
-            image_key=s3_image_key,
-        )
-
-        db_conversation.last_message_at = user_db_message.created_at
-        await crud_conversation.update_conversation(self.db, db_conv=db_conversation)
-
-        ai_message_in = MessageCreate(content=gemini_response.response)
-        ai_db_message = await crud_message.create_message(
-            self.db,
-            message_in=ai_message_in,
+        # 5. AI 응답 메시지를 DB에 저장
+        ai_message_timestamp = datetime.now(timezone.utc)
+        ai_message_obj = MessageModel(
             conversation_id=conversation_id,
             sender_type=SenderType.AI,
+            content=gemini_response.response,
             gemini_token_usage=gemini_response.token_usage,
+            created_at=ai_message_timestamp,
+        )
+        ai_db_message = await crud_message.save_message(
+            self.db, db_message=ai_message_obj
         )
 
+        # 대화방의 마지막 업데이트 시간을 AI 메시지 시간으로 다시 갱신
         db_conversation.last_message_at = ai_db_message.created_at
         await crud_conversation.update_conversation(self.db, db_conv=db_conversation)
 
+        # 6. 최종 응답 객체 구성 및 반환
         return ChatMessageResponse(
             user_message=MessageResponse.model_validate(user_db_message),
             ai_message=MessageResponse.model_validate(ai_db_message),
@@ -178,17 +185,28 @@ class MessageService:
 
     async def create_ai_message(
         self, conversation_id: int, content: str, token_usage: int = 0
-    ) -> Message:
-        """AI 메시지를 생성하고 저장합니다."""
-        message_in = MessageCreate(content=content)
-        ai_message = await crud_message.create_message(
-            self.db,
-            message_in=message_in,
+    ) -> MessageModel:
+        """
+        AI가 보내는 시스템 메시지(예: 시작 메시지)를 생성하고 DB에 저장합니다.
+        """
+        # 1. AI 메시지의 타임스탬프를 명시적으로 생성합니다.
+        ai_message_timestamp = datetime.now(timezone.utc)
+        
+        # 2. 타임스탬프를 포함하여 Message 객체를 직접 생성합니다.
+        ai_message_obj = MessageModel(
             conversation_id=conversation_id,
             sender_type=SenderType.AI,
+            content=content,
             gemini_token_usage=token_usage,
+            created_at=ai_message_timestamp,
         )
 
+        # 3. 단순화된 CRUD 함수를 통해 DB에 저장합니다.
+        ai_message = await crud_message.save_message(
+            self.db, db_message=ai_message_obj
+        )
+
+        # 4. 관련 대화방의 마지막 업데이트 시간을 갱신합니다.
         conversation = await crud_conversation.get_conversation(
             self.db, conversation_id=conversation_id
         )
