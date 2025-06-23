@@ -13,7 +13,7 @@ from app.schemas.conversation import ConversationCreate
 # 이 변수는 대화방 객체를 조회할 때 항상 함께 로드할 관계들을 명시합니다.
 _CONVERSATION_EAGER_LOADING_OPTIONS = (
     joinedload(Conversation.user),
-    joinedload(Conversation.persona),
+    selectinload(Conversation.persona),
     selectinload(Conversation.applied_phishing_case).joinedload(PhishingCase.category),
 )
 
