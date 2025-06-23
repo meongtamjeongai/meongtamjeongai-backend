@@ -96,42 +96,13 @@ class MessageService:
                 detail="Conversation not found or not accessible.",
             )
 
-        # 2. S3에 이미지 업로드 (이미지가 있는 경우)
-        s3_image_key = None
-        if message_in.image_base64:
-            try:
-                image_data = base64.b64decode(message_in.image_base64)
-                filename = f"messages/{uuid.uuid4()}.png"
-                await self.s3_service.upload_bytes_to_s3_async(
-                    data_bytes=image_data, object_key=filename, content_type="image/png"
-                )
-                s3_image_key = filename
-            except Exception as e:
-                # S3 업로드 실패 시에도 로깅 후 대화는 계속 진행
-                print(f"S3 이미지 업로드 실패: {e}")
-
-        # 3. 사용자 메시지를 DB에 저장
-        user_message_timestamp = datetime.now(timezone.utc)
-        user_message_obj = MessageModel(
-            conversation_id=conversation_id,
-            sender_type=SenderType.USER,
-            content=message_in.content if message_in.content else "",
-            image_key=s3_image_key,
-            created_at=user_message_timestamp,
-        )
-        user_db_message = await crud_message.save_message(
-            self.db, db_message=user_message_obj
-        )
-
-        # 대화방의 마지막 업데이트 시간을 사용자 메시지 시간으로 갱신
-        db_conversation.last_message_at = user_db_message.created_at
-        await crud_conversation.update_conversation(self.db, db_conv=db_conversation)
-
-        # 4. Gemini AI에 응답 요청
+        # 2. DB에 메시지를 저장하기 *전*에 현재까지의 대화 내역을 먼저 불러옵니다.
         history = await crud_message.get_messages_by_conversation(
             self.db, conversation_id=conversation_id, limit=None, sort_asc=True
         )
-        
+
+        # 3. Gemini AI에 먼저 응답을 요청합니다.
+        # 이렇게 하면 history에는 이전 대화까지만 담기고, 현재 메시지는 user_message로 한 번만 전달됩니다.
         user_message_content = message_in.content if message_in.content else ""
         gemini_prompt_text = (
             "이 이미지는 어떤 내용이야? 자세히 설명해줘."
@@ -157,7 +128,34 @@ class MessageService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
             )
 
-        # 5. AI 응답 메시지를 DB에 저장
+        # 4. API 호출이 끝난 후, 사용자 메시지를 DB에 저장합니다.
+        s3_image_key = None
+        if message_in.image_base64:
+            try:
+                image_data = base64.b64decode(message_in.image_base64)
+                filename = f"messages/{uuid.uuid4()}.png"
+                await self.s3_service.upload_bytes_to_s3_async(
+                    data_bytes=image_data, object_key=filename, content_type="image/png"
+                )
+                s3_image_key = filename
+            except Exception as e:
+                print(f"S3 이미지 업로드 실패: {e}")
+
+        user_message_timestamp = datetime.now(timezone.utc)
+        user_message_obj = MessageModel(
+            conversation_id=conversation_id,
+            sender_type=SenderType.USER,
+            content=user_message_content,
+            image_key=s3_image_key,
+            created_at=user_message_timestamp,
+        )
+        user_db_message = await crud_message.save_message(
+            self.db, db_message=user_message_obj
+        )
+        db_conversation.last_message_at = user_db_message.created_at
+        await crud_conversation.update_conversation(self.db, db_conv=db_conversation)
+
+        # 5. 마지막으로 AI 응답 메시지를 DB에 저장합니다.
         ai_message_timestamp = datetime.now(timezone.utc)
         ai_message_obj = MessageModel(
             conversation_id=conversation_id,
@@ -169,8 +167,6 @@ class MessageService:
         ai_db_message = await crud_message.save_message(
             self.db, db_message=ai_message_obj
         )
-
-        # 대화방의 마지막 업데이트 시간을 AI 메시지 시간으로 다시 갱신
         db_conversation.last_message_at = ai_db_message.created_at
         await crud_conversation.update_conversation(self.db, db_conv=db_conversation)
 
