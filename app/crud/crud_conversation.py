@@ -92,11 +92,20 @@ async def create_conversation(
 async def update_conversation(
     db: AsyncSession, *, db_conv: Conversation
 ) -> Conversation:
-    """대화방 객체의 변경사항을 DB에 반영합니다."""
+    """
+    대화방 객체의 변경사항을 DB에 반영하고, 관계가 로드된 완전한 객체를 반환합니다.
+    """
     db.add(db_conv)
     await db.flush()
-    await db.refresh(db_conv)
-    return db_conv
+    # await db.refresh(db_conv) # 더 이상 필요 없으므로 삭제하거나 주석 처리합니다.
+
+    # get_conversation 함수를 사용하여 Eager Loading이 적용된 객체를 다시 조회하여 반환합니다.
+    updated_conversation = await get_conversation(db, conversation_id=db_conv.id)
+    if not updated_conversation:
+        # 이 경우는 거의 발생하지 않지만, 방어적으로 처리합니다.
+        raise RuntimeError(f"Failed to re-fetch conversation with id {db_conv.id} after update.")
+
+    return updated_conversation
 
 async def delete_conversation(db: AsyncSession, *, conversation_id: int) -> Optional[Conversation]:
     """주어진 ID의 대화방을 삭제합니다."""

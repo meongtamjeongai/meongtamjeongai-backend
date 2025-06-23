@@ -127,10 +127,6 @@ class ConversationService:
             new_conversation = await crud_conversation.update_conversation(
                 self.db, db_conv=new_conversation
             )
-            # 관계 필드를 포함한 완전한 객체를 다시 로드
-            new_conversation = await crud_conversation.get_conversation(
-                self.db, conversation_id=new_conversation.id
-            )
 
         # 3. 시작 메시지 전송
         if persona.starting_message:
