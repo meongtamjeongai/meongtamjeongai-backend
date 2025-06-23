@@ -146,7 +146,6 @@ jobs:
             --name __CONTAINER_NAME__ \
             -p __HOST_PORT__:__CONTAINER_PORT__ \
             -e APP_ENV="prod" \
-            -e FIREBASE_SERVICE_ACCOUNT_KEY_PATH="/tmp/firebase_service_account.json" \
             \${DOCKER_ENV_FLAGS} \
             --restart always \
             __FULL_IMAGE_URI__

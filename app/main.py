@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from firebase_admin import credentials
 from pydantic import BaseModel
 from scalar_fastapi import get_scalar_api_reference
+from starlette.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.v1.api import api_router_v1
@@ -115,6 +116,22 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# 허용할 출처(Origin) 목록을 정의합니다.
+# 운영 환경의 클라이언트 주소와 관리자 페이지 주소, 그리고 로컬 개발 환경 주소를 포함합니다.
+origins = [
+    "https://meong.shop",        # 운영 환경 클라이언트
+    "https://admin.meong.shop",  # 운영 환경 관리자 페이지
+    "http://localhost",          # 로컬 개발 환경
+    "http://localhost:8000",     # 로컬 API 문서 테스트
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,       # 지정된 출처의 요청만 허용합니다.
+    allow_credentials=True,      # 자격 증명(쿠키, 인증 헤더 등)을 포함한 요청을 허용합니다.
+    allow_methods=["*"],         # 모든 HTTP 메서드(GET, POST, PUT 등)를 허용합니다.
+    allow_headers=["*"],         # 모든 HTTP 요청 헤더를 허용합니다.
+)
 
 # 버전 정보 응답을 위한 Pydantic 모델
 class VersionResponse(BaseModel):

@@ -3,7 +3,7 @@
 # =================================
 # 1. Builder Stage
 # =================================
-FROM python:3.13-slim AS builder
+FROM python:3.13-slim-bookworm AS builder
 
 # ... (builder 스테이지는 변경 없음)
 WORKDIR /workspace
@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir --upgrade pip && pip wheel --no-cache-dir --wheel
 # =================================
 # 2. Final Stage
 # =================================
-FROM python:3.13-slim AS final
+FROM python:3.13-slim-bookworm AS final
 
 # 비-루트 사용자 생성
 ARG USERNAME=vscode
