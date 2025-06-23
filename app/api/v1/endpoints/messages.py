@@ -49,7 +49,7 @@ async def read_conversation_messages(
     - **sort_asc**: 정렬 방향 (기본은 최신순).
     """
     # 서비스 계층에서 conversation_id와 current_user.id를 사용하여 권한 확인 및 조회
-    messages = message_service.get_messages_for_conversation(
+    messages = await message_service.get_messages_for_conversation(
         conversation_id=conversation_id,
         current_user=current_user,
         skip=skip,
