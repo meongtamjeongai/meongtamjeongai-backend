@@ -283,3 +283,75 @@ class AuthService:
 
         return user
 ```
+
+## 💡 문제 해결 및 기술적 결정
+
+이 프로젝트를 진행하며 마주했던 기술적 고민과 문제 해결 과정을 공유합니다.
+
+### 1. 왜 Spring Boot 대신 FastAPI를 선택했는가?
+<details>
+Java와 Spring Boot 생태계의 안정성과 풍부한 기능은 큰 장점이지만, 이 프로젝트의 목표와 특성을 고려하여 다음과 같은 FastAPI의 강점을 활용하고자 했습니다.
+
+*   **🚀 생산성과 성능**: Python의 간결한 문법과 FastAPI의 비동기(Async) 네이티브 지원은 적은 코드로도 높은 처리 성능을 낼 수 있게 해줍니다. 특히 I/O 작업이 잦은 AI API 연동 및 채팅 서비스에 매우 적합하다고 판단했습니다.
+*   **👨‍💻 직관적인 개발 경험**: 타입 힌트(Type Hint)만으로 데이터 유효성 검사, 직렬화, API 문서 자동 생성이 모두 해결되는 FastAPI의 개발 경험은 Spring Boot의 보일러플레이트 코드(Boilerplate Code)를 줄여 핵심 비지니스 로직에 더 집중할 수 있게 했습니다.
+*   **🧠 풍부한 AI/ML 생태계 활용**: **`spaCy`**, **`scikit-learn`**, **`Hugging Face Transformers`** 등 최첨단 자연어 처리 및 머신러닝 라이브러리는 Python을 중심으로 발전하고 있습니다. 향후 사용자의 대화 내용을 분석하여 피싱 의도를 더 정교하게 파악하거나, 감정 분석을 도입하는 등 **AI 기능을 고도화할 때, Python 생태계를 활용하는 것이 압도적으로 유리**하다고 판단했습니다. 이는 Java 생태계에서는 상대적으로 구현하기 어렵거나 더 많은 노력이 필요한 부분입니다.
+
+물론, Spring Security나 Spring Data JPA처럼 강력하고 성숙한 라이브러리의 부재는 아쉬운 점이었습니다. 이를 해결하기 위해 다음과 같이 직접 구현하거나 대체 라이브러리를 적극적으로 활용했습니다.
+
+*   **인증/인가**: `python-jose`와 `passlib`를 조합하고, FastAPI의 의존성 주입 시스템(`Depends`)을 활용하여 유연하고 재사용 가능한 인증/인가 레이어를 직접 설계했습니다.
+*   **데이터베이스 관리**: `SQLAlchemy` ORM과 `Alembic` 마이그레이션 도구를 사용하여 Spring Data JPA 못지않은 체계적인 데이터 관리 환경을 구축했습니다.
+</details>
+
+### 2. 개발 과정에서의 트러블 슈팅: N+1 쿼리 문제 해결
+<details>
+사용자의 대화 목록을 조회하는 API에서 성능 저하가 발견되었습니다. 원인 분석 결과, 각 대화(`Conversation`)를 조회한 후, 해당 대화에 연결된 `User`, `Persona` 정보를 얻기 위해 루프를 돌며 추가적인 쿼리가 발생하는 <b>N+1 문제</b>임을 확인했습니다.
+
+**해결 과정:**
+
+SQLAlchemy의 **즉시 로딩(Eager Loading)** 전략을 사용하여 이 문제를 해결했습니다. `selectinload`와 `joinedload` 옵션을 활용하여, 첫 번째 쿼리를 실행할 때 연관된 모든 엔티티를 함께 가져오도록 최적화했습니다.
+
+*   **AS-IS (기존 코드의 문제점)**
+    ```python
+    # conversation_list = db.query(Conversation).filter(...).all() # 1번의 쿼리 발생
+    # for conv in conversation_list:
+    #     print(conv.user.username)  # N번의 추가 쿼리 발생
+    #     print(conv.persona.name)   # N번의 추가 쿼리 발생
+    ```
+
+*   **TO-BE (개선된 코드)**
+    ```python
+    # app/crud/crud_conversation.py
+
+    # 공통 로딩 옵션을 미리 정의
+    _CONVERSATION_EAGER_LOADING_OPTIONS = (
+        selectinload(Conversation.persona),
+        joinedload(Conversation.user),
+        # ... 기타 필요한 관계 로드
+    )
+
+    def _get_base_conversation_query() -> Query:
+        # 기본 쿼리에 Eager Loading 옵션을 항상 적용
+        return select(Conversation).options(*_CONVERSATION_EAGER_LOADING_OPTIONS)
+
+    async def get_conversations_by_user(...):
+        # 이 함수는 이제 N+1 문제 없이 단 한 번의 쿼리로 모든 정보를 가져옴
+        stmt = _get_base_conversation_query().where(...)
+        result = await db.execute(stmt)
+        return result.scalars().all()
+    ```
+이러한 최적화를 통해 API의 응답 시간을 크게 단축하고 데이터베이스 부하를 줄일 수 있었습니다.
+</details>
+
+### 3. 아키텍처 결정: 왜 계층형 구조(Layered Architecture)인가?
+
+<details>
+    
+프로젝트 초기 아키텍처로 <b>계층형 구조</b>를 선택한 것은 <b>팀의 생산성을 극대화</b>하고, <b>초기 개발 단계의 불필요한 복잡성을 피하기 위한</b> 전략적인 결정이었습니다.
+
+*   <b>낮은 학습 곡선과 높은 생산성</b>: 계층형 구조는 대부분의 개발자에게 매우 익숙합니다. 복잡한 헥사고날(Hexagonal)이나 클린 아키텍처(Clean Architecture)와 달리, 팀원 모두가 구조를 빠르게 이해하고 즉시 개발에 집중할 수 있었습니다. 이는 <b>팀의 기술적 성숙도와 프로젝트의 현재 단계를 고려했을 때 가장 합리적인 선택</b>이었습니다.
+*   <b>명확한 책임 분리와 단순성</b>: `API`, `Service`, `CRUD`로 이어지는 명확하고 단일한 데이터 흐름은 코드의 위치를 예측하기 쉽게 만듭니다. 이는 초기 기능 구현 단계에서 발생할 수 있는 혼란을 줄이고, <b>"가장 단순한 것이 최고의 해결책(Keep It Simple, Stupid)"</b>이라는 원칙을 지키는 데 도움이 되었습니다.
+*   <b>점진적 발전의 기반</b>: 현재의 응집도 높은 `Service` 계층(`conversation_service`, `auth_service` 등)은 향후 서비스가 고도화되고 도메인이 명확해졌을 때, 이를 기준으로 <b>MSA로 점진적으로 전환할 수 있는 견고한 기반</b>이 됩니다. 처음부터 과도한 설계를 적용하기보다, 비즈니스의 성장에 맞춰 아키텍처를 진화시키는 실용적인 접근법을 택했습니다.
+
+결론적으로, 계층형 구조는 <b>"가장 이상적인 아키텍처"</b>라서가 아니라, <b>"현재 우리 팀과 프로젝트 단계에 가장 적합하고 효율적인 아키텍처"</b>였기 때문에 선택되었습니다.
+
+</details>
